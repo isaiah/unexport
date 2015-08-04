@@ -17,3 +17,7 @@ func NewB(i int) B {
 func (b *B) String() string {
 	return fmt.Sprintf("#{B %d, %s}", b.A, b.Z)
 }
+
+func (b *B) Sum() int {
+	return b.X + packa.UsedVar + packa.UsedConst
+}

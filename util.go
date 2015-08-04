@@ -9,7 +9,7 @@ import (
 )
 
 func wholePath(obj types.Object, pkg *types.Package, prog *loader.Program) string {
-	if v, ok := obj.(*types.Var); ok {
+	if v, ok := obj.(*types.Var); ok && v.IsField() {
 		structName := getDeclareStructOrInterface(prog, v)
 		return fmt.Sprintf("(%s.%s).%s", pkg.Path(), structName, obj.Name())
 	} else if f, ok := obj.(*types.Func); ok {

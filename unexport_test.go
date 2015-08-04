@@ -2,7 +2,6 @@ package unexport
 
 import (
 	"golang.org/x/tools/go/loader"
-	"golang.org/x/tools/go/types"
 	"log"
 	"testing"
 )
@@ -31,8 +30,8 @@ func TestExportedObjects(t *testing.T) {
 
 func TestUsedObjects(t *testing.T) {
 	objs := usedObjects(prog)
-	if len(objs) != 2 {
-		t.Errorf("expected 2 packages, got %d", len(objs))
+	if len(objs) != 3 {
+		t.Errorf("expected 3 packages, got %d", len(objs))
 	}
 }
 

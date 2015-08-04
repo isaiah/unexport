@@ -4,6 +4,16 @@ import (
 	"fmt"
 )
 
+var (
+	UnusedVar = 1
+	UsedVar   = 2
+)
+
+const (
+	UsedConst   = 3
+	UnusedConst = 4
+)
+
 type C interface {
 	Count() int
 }
