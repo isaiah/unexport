@@ -31,13 +31,11 @@ func usedObjects(prog *loader.Program) map[*types.Package]Set {
 				continue
 			}
 			//log.Printf("%s uses %s.%#v.%v\n", pkgInfo.Pkg.Name(), obj.Pkg().Name(), obj.Parent(), id.Name)
-			if obj.Pkg() != nil {
-				if objs[obj.Pkg()] == nil {
-					objs[obj.Pkg()] = make(map[types.Object]bool)
-				}
-				if obj.Pkg() != pkgInfo.Pkg {
-					objs[obj.Pkg()][obj] = true
-				}
+			if objs[obj.Pkg()] == nil {
+				objs[obj.Pkg()] = make(map[types.Object]bool)
+			}
+			if obj.Pkg() != pkgInfo.Pkg {
+				objs[obj.Pkg()][obj] = true
 			}
 		}
 	}
@@ -90,13 +88,9 @@ func getDeclareStructOrInterface(prog *loader.Program, v *types.Var) string {
 	return ""
 }
 
-func getDeclareStructOrInterfaceForMethod(prog *loader.Program, v *types.Func) string {
-	return recv(v).Type().String()
-}
-
 func Main() {
 	var conf loader.Config
-	conf.Import("github.com/isaiah/unexport/test_data/a")
+	//conf.Import("github.com/isaiah/unexport/test_data/a")
 	conf.Import("github.com/isaiah/unexport/test_data/b")
 	prog, err := conf.Load()
 	if err != nil {
@@ -106,13 +100,9 @@ func Main() {
 	unused := unusedObjects(prog)
 	for pkg, objs := range unused {
 		for _, obj := range objs {
-			//log.Printf("%v.%v from %v is not used\n", obj.Type(), obj.Id(), pkg.Name())
 			log.Printf("gorename -from %s -to %s\n", wholePath(obj, pkg, prog), lowerFirst(obj.Name()))
 		}
 	}
-
-	//printInitialPackages(prog)
-	//printImported(prog)
 }
 
 func printImported(prog *loader.Program) {

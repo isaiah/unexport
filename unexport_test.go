@@ -1,6 +1,9 @@
 package unexport
 
 import (
+	"fmt"
+	"go/build"
+	"golang.org/x/tools/go/buildutil"
 	"golang.org/x/tools/go/loader"
 	"log"
 	"testing"
@@ -12,8 +15,10 @@ var (
 )
 
 func init() {
-	var conf loader.Config
-	conf.Import("github.com/isaiah/unexport/test_data/a")
+	conf := loader.Config{
+		SourceImports: true,
+		AllowErrors:   false,
+	}
 	conf.Import("github.com/isaiah/unexport/test_data/b")
 	prog, err = conf.Load()
 	if err != nil {
@@ -43,4 +48,26 @@ func TestUnusedObjects(t *testing.T) {
 			log.Printf("gorename -from %s -to %s\n", wholePath(obj, pkg, prog), lowerFirst(obj.Name()))
 		}
 	}
+}
+
+// ---------------------------------------------------------------------
+
+// Simplifying wrapper around buildutil.FakeContext for packages whose
+// filenames are sequentially numbered (%d.go).  pkgs maps a package
+// import path to its list of file contents.
+func fakeContext(pkgs map[string][]string) *build.Context {
+	pkgs2 := make(map[string]map[string]string)
+	for path, files := range pkgs {
+		filemap := make(map[string]string)
+		for i, contents := range files {
+			filemap[fmt.Sprintf("%d.go", i)] = contents
+		}
+		pkgs2[path] = filemap
+	}
+	return buildutil.FakeContext(pkgs2)
+}
+
+// helper for single-file main packages with no imports.
+func main(content string) *build.Context {
+	return fakeContext(map[string][]string{"main": {content}})
 }

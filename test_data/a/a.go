@@ -18,6 +18,10 @@ type C interface {
 	Count() int
 }
 
+type D interface {
+	Dump() string
+}
+
 type A struct {
 	X int
 }

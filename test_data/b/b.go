@@ -21,3 +21,7 @@ func (b *B) String() string {
 func (b *B) Sum() int {
 	return b.X + packa.UsedVar + packa.UsedConst
 }
+
+func (b *B) Dump() string {
+	return b.String()
+}

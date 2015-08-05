@@ -11,14 +11,14 @@ import (
 func wholePath(obj types.Object, pkg *types.Package, prog *loader.Program) string {
 	if v, ok := obj.(*types.Var); ok && v.IsField() {
 		structName := getDeclareStructOrInterface(prog, v)
-		return fmt.Sprintf("(%s.%s).%s", pkg.Path(), structName, obj.Name())
+		return fmt.Sprintf("(%s.%s).%s", pkg.Name(), structName, obj.Name())
 	} else if f, ok := obj.(*types.Func); ok {
 		if r := recv(f); r != nil {
-			structName := r.Type().String()
-			return fmt.Sprintf("(%s.%s).%s", pkg.Path(), structName, obj.Name())
+			structName := types.TypeString(pkg, r.Type())
+			return fmt.Sprintf("(%s.%s).%s", pkg.Name(), structName, obj.Name())
 		}
 	}
-	return fmt.Sprintf("%s.%s", pkg.Path(), obj.Name())
+	return fmt.Sprintf("%s.%s", pkg.Name(), obj.Name())
 }
 
 func lowerFirst(s string) string {
