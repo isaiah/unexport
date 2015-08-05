@@ -25,3 +25,7 @@ func (b *B) Sum() int {
 func (b *B) Dump() string {
 	return b.String()
 }
+
+func Puts(dumper packa.D) string {
+	return dumper.Dump()
+}
