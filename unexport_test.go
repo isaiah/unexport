@@ -4,48 +4,49 @@ import (
 	"fmt"
 	"go/build"
 	"golang.org/x/tools/go/buildutil"
-	"golang.org/x/tools/go/loader"
-	"log"
 	"testing"
 )
 
-var (
-	prog *loader.Program
-	err  error
-)
-
-func init() {
-	conf := loader.Config{
-		SourceImports: true,
-		AllowErrors:   false,
-	}
-	conf.Import("github.com/isaiah/unexport/test_data/b")
-	prog, err = conf.Load()
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-func TestExportedObjects(t *testing.T) {
-	objs := exportedObjects(prog)
-	if len(objs) != 2 {
-		t.Errorf("expected 2 packages, got %d", len(objs))
-	}
-}
-
-func TestUsedObjects(t *testing.T) {
-	objs := usedObjects(prog)
-	if len(objs) != 3 {
-		t.Errorf("expected 3 packages, got %d", len(objs))
-	}
-}
-
-func TestUnusedObjects(t *testing.T) {
-	unused := unusedObjects(prog)
-	for pkg, objs := range unused {
-		for _, obj := range objs {
-			//log.Printf("%v.%v from %v is not used\n", obj.Type(), obj.Id(), pkg.Name())
-			log.Printf("gorename -from %s -to %s\n", wholePath(obj, pkg, prog), lowerFirst(obj.Name()))
+func TestUnusedVar(t *testing.T) {
+	for _, test := range []struct {
+		ctx  *build.Context
+		pkg  string
+		want []interface{}
+	}{
+		// init data
+		// unused var
+		{ctx: main(`package main; var Unused int = 1`),
+			pkg:  "main",
+			want: []interface{}{"main.Unused", "unused"},
+		},
+		// unused const
+		{ctx: main(`package main; const Unused int = 1`),
+			pkg:  "main",
+			want: []interface{}{"main.Unused", "unused"},
+		},
+		// unused type
+		{ctx: main(`package main; type S int`),
+			pkg:  "main",
+			want: []interface{}{"main.S", "s"},
+		},
+		// unused type field
+		{ctx: main(`package main; type s struct { T int }`),
+			pkg:  "main",
+			want: []interface{}{"(main.s).T", "t"},
+		},
+		// unused type method
+		{ctx: main(`package main; type s int; func (s) F(){}`),
+			pkg:  "main",
+			want: []interface{}{"(main.s).F", "f"},
+		},
+	} {
+		// test body
+		cmds, err := Main(test.ctx, "main")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cmds[0] != formatCmd(test.want) {
+			t.Errorf("expected %s, got %s", formatCmd(test.want), cmds[0])
 		}
 	}
 }
@@ -70,4 +71,8 @@ func fakeContext(pkgs map[string][]string) *build.Context {
 // helper for single-file main packages with no imports.
 func main(content string) *build.Context {
 	return fakeContext(map[string][]string{"main": {content}})
+}
+
+func formatCmd(paths []interface{}) string {
+	return fmt.Sprintf("gorename -from %s -to %s\n", paths...)
 }

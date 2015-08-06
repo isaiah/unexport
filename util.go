@@ -14,8 +14,8 @@ func wholePath(obj types.Object, pkg *types.Package, prog *loader.Program) strin
 		return fmt.Sprintf("(%s.%s).%s", pkg.Name(), structName, obj.Name())
 	} else if f, ok := obj.(*types.Func); ok {
 		if r := recv(f); r != nil {
-			structName := types.TypeString(pkg, r.Type())
-			return fmt.Sprintf("(%s.%s).%s", pkg.Name(), structName, obj.Name())
+			structName := types.TypeString(r.Type(), nil)
+			return fmt.Sprintf("(%s).%s", structName, obj.Name())
 		}
 	}
 	return fmt.Sprintf("%s.%s", pkg.Name(), obj.Name())

@@ -1,7 +1,9 @@
 package unexport
 
 import (
+	"fmt"
 	"go/ast"
+	"go/build"
 	"golang.org/x/tools/go/loader"
 	"golang.org/x/tools/go/types"
 	"log"
@@ -88,21 +90,25 @@ func getDeclareStructOrInterface(prog *loader.Program, v *types.Var) string {
 	return ""
 }
 
-func Main() {
-	var conf loader.Config
-	//conf.Import("github.com/isaiah/unexport/test_data/a")
-	conf.Import("github.com/isaiah/unexport/test_data/b")
+func Main(ctx *build.Context, pkgName string) ([]string, error) {
+	conf := loader.Config{
+		Build: ctx,
+	}
+	conf.Import(pkgName)
 	prog, err := conf.Load()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	unused := unusedObjects(prog)
+	var commands []string
 	for pkg, objs := range unused {
 		for _, obj := range objs {
-			log.Printf("gorename -from %s -to %s\n", wholePath(obj, pkg, prog), lowerFirst(obj.Name()))
+			cmd := fmt.Sprintf("gorename -from %s -to %s\n", wholePath(obj, pkg, prog), lowerFirst(obj.Name()))
+			commands = append(commands, cmd)
 		}
 	}
+	return commands, nil
 }
 
 func printImported(prog *loader.Program) {
