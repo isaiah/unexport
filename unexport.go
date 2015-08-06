@@ -90,11 +90,13 @@ func getDeclareStructOrInterface(prog *loader.Program, v *types.Var) string {
 	return ""
 }
 
-func Main(ctx *build.Context, pkgName string) ([]string, error) {
+func Main(ctx *build.Context, pkgs []string) ([]string, error) {
 	conf := loader.Config{
 		Build: ctx,
 	}
-	conf.Import(pkgName)
+	for _, pkg := range pkgs {
+		conf.Import(pkg)
+	}
 	prog, err := conf.Load()
 	if err != nil {
 		log.Fatal(err)
