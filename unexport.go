@@ -57,7 +57,7 @@ func (u *unexporter) usedObjects() map[*types.Package]Set {
 	objs := make(map[*types.Package]Set)
 	for _, pkgInfo := range u.packages {
 		// easy path
-		for _, obj := range pkgInfo.Uses {
+		for id, obj := range pkgInfo.Uses {
 			// ignore builtin value
 			if obj.Pkg() == nil {
 				continue
@@ -69,6 +69,10 @@ func (u *unexporter) usedObjects() map[*types.Package]Set {
 			// if it's a type from different package, store it
 			if obj.Pkg() != pkgInfo.Pkg {
 				objs[obj.Pkg()][obj] = true
+			}
+			// embedded field
+			if field := pkgInfo.Defs[id]; field != nil {
+				objs[field.Pkg()][field] = true
 			}
 		}
 	}

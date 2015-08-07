@@ -153,7 +153,6 @@ type x struct {
 `},
 		}),
 			pkgs: []string{"bar", "foo"},
-			want: []interface{}{"(bar.x).S", "s"},
 		},
 		// unused interface type
 		{ctx: fakeContext(map[string][]string{
