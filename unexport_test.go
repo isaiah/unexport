@@ -7,7 +7,44 @@ import (
 	"testing"
 )
 
-func TestUnusedVar(t *testing.T) {
+func TestUsedIdentifiers(t *testing.T) {
+	for _, test := range []struct {
+		ctx  *build.Context
+		pkgs []string
+	}{
+		{ctx: fakeContext(
+			map[string][]string{
+				"foo": {`
+package foo
+type I interface{
+F()
+}
+`},
+				"bar": {`
+package bar
+import "foo"
+type s int
+func (s) F() {}
+var _ foo.I = s(0)
+`},
+			},
+		),
+			pkgs: []string{"foo", "bar"},
+		},
+	} {
+		prog, err := loadProgram(test.ctx, test.pkgs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		u := &unexporter{packages: prog.Imported}
+		used := u.usedObjects()
+		if len(used) != 2 {
+			t.Errorf("expected 2 used objects, got %d", len(used))
+		}
+	}
+}
+
+func TestUnusedIdentifiers(t *testing.T) {
 	for _, test := range []struct {
 		ctx  *build.Context
 		pkgs []string
@@ -116,6 +153,35 @@ type x struct {
 		}),
 			pkgs: []string{"bar", "foo"},
 			want: []interface{}{"(bar.x).S", "s"},
+		},
+		// unused interface type
+		{ctx: fakeContext(map[string][]string{
+			"foo": {`
+package foo
+type I interface {
+}
+`},
+		}),
+			pkgs: []string{"foo"},
+			want: []interface{}{"foo.I", "i"},
+		},
+		// unused interface type
+		{ctx: fakeContext(map[string][]string{
+			"foo": {`
+package foo
+type I interface {
+F()
+}
+`},
+			"bar": {`
+package bar
+import "foo"
+type t int
+func (t) F() {}
+var _ foo.I = t(0)
+`},
+		}),
+			pkgs: []string{"foo", "bar"},
 		},
 	} {
 		// test body
