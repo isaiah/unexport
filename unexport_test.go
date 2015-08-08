@@ -39,8 +39,8 @@ var _ foo.I = s(0)
 		}
 		u := &unexporter{packages: prog.Imported}
 		used := u.usedObjects()
-		if len(used) != 2 {
-			t.Errorf("expected 2 used objects, got %d", len(used))
+		if len(used) != 3 {
+			t.Errorf("expected 3 used objects, got %v", used)
 		}
 	}
 }
@@ -220,6 +220,29 @@ var _ foo.I = t(0)
 		}),
 			pkgs: []string{"foo", "bar"},
 			want: []interface{}{"(bar.j).G", "g"},
+		},
+		// interface used in typeswitch
+		{ctx: fakeContext(map[string][]string{
+			"foo": {`
+package foo
+type I interface {
+F() int
+}
+`},
+			"bar": {`
+package bar
+import "foo"
+func f(z interface{}) {
+		switch y := z.(type) {
+				case foo.I:
+						print(y.F())
+				default:
+						print(y)
+		}
+}
+`},
+		}),
+			pkgs: []string{"foo", "bar"},
 		},
 	} {
 		// test body

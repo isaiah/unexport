@@ -32,20 +32,13 @@ func (u *unexporter) satisfy() map[satisfy.Constraint]bool {
 
 func (u *unexporter) unusedObjects() map[*types.Package][]types.Object {
 	used := u.usedObjects()
-	objects := make(map[types.Object]bool)
-	for _, objs := range used {
-		for obj := range objs {
-			objects[obj] = true
-		}
-	}
 	objs := make(map[*types.Package][]types.Object)
 	for _, pkgInfo := range u.packages {
 		for id, obj := range pkgInfo.Defs {
-			if objects[obj] {
+			if used[obj] {
 				continue
 			}
 			if id.IsExported() {
-				//log.Printf("%s.%v\n", pkgInfo.Pkg.Name(), obj.Name())
 				objs[pkgInfo.Pkg] = append(objs[pkgInfo.Pkg], obj)
 			}
 		}
@@ -53,8 +46,8 @@ func (u *unexporter) unusedObjects() map[*types.Package][]types.Object {
 	return objs
 }
 
-func (u *unexporter) usedObjects() map[*types.Package]Set {
-	objs := make(map[*types.Package]Set)
+func (u *unexporter) usedObjects() map[types.Object]bool {
+	objs := make(map[types.Object]bool)
 	for _, pkgInfo := range u.packages {
 		// easy path
 		for id, obj := range pkgInfo.Uses {
@@ -62,17 +55,14 @@ func (u *unexporter) usedObjects() map[*types.Package]Set {
 			if obj.Pkg() == nil {
 				continue
 			}
-			// make the map if it's nil
-			if objs[obj.Pkg()] == nil {
-				objs[obj.Pkg()] = make(map[types.Object]bool)
-			}
 			// if it's a type from different package, store it
 			if obj.Pkg() != pkgInfo.Pkg {
-				objs[obj.Pkg()][obj] = true
+				objs[obj] = true
 			}
 			// embedded field
 			if field := pkgInfo.Defs[id]; field != nil {
-				objs[field.Pkg()][field] = true
+				// embdded field identifier is the same as it's type
+				objs[field] = true
 			}
 		}
 	}
@@ -86,12 +76,12 @@ func (u *unexporter) usedObjects() map[*types.Package]Set {
 		lset := u.msets.MethodSet(key.LHS)
 		for i := 0; i < lset.Len(); i++ {
 			obj := lset.At(i).Obj()
-			objs[obj.Pkg()][obj] = true
+			objs[obj] = true
 		}
 		rset := u.msets.MethodSet(key.RHS)
 		for i := 0; i < rset.Len(); i++ {
 			obj := rset.At(i).Obj()
-			objs[obj.Pkg()][obj] = true
+			objs[obj] = true
 		}
 
 	}
