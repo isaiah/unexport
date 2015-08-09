@@ -55,32 +55,32 @@ func TestUnusedIdentifiers(t *testing.T) {
 		// unused var
 		{ctx: main(`package main; var Unused int = 1`),
 			pkgs: []string{"main"},
-			want: []interface{}{"main.Unused", "unused"},
+			want: []interface{}{"\"main\".Unused", "unused"},
 		},
 		// unused const
 		{ctx: main(`package main; const Unused int = 1`),
 			pkgs: []string{"main"},
-			want: []interface{}{"main.Unused", "unused"},
+			want: []interface{}{"\"main\".Unused", "unused"},
 		},
 		// unused type
 		{ctx: main(`package main; type S int`),
 			pkgs: []string{"main"},
-			want: []interface{}{"main.S", "s"},
+			want: []interface{}{"\"main\".S", "s"},
 		},
 		// unused type field
 		{ctx: main(`package main; type s struct { T int }`),
 			pkgs: []string{"main"},
-			want: []interface{}{"(main.s).T", "t"},
+			want: []interface{}{"(\"main\".s).T", "t"},
 		},
 		// unused type method
 		{ctx: main(`package main; type s int; func (s) F(){}`),
 			pkgs: []string{"main"},
-			want: []interface{}{"(main.s).F", "f"},
+			want: []interface{}{"(\"main\".s).F", "f"},
 		},
 		// unused interface method
 		{ctx: main(`package main; type s interface { F() }`),
 			pkgs: []string{"main"},
-			want: []interface{}{"(main.s).F", "f"},
+			want: []interface{}{"(\"main\".s).F", "f"},
 		},
 		// type used by function
 		{ctx: fakeContext(map[string][]string{
@@ -97,7 +97,7 @@ func f(t *foo.T) {}
 `},
 		}),
 			pkgs: []string{"bar", "foo"},
-			want: []interface{}{"foo.S", "s"},
+			want: []interface{}{"\"foo\".S", "s"},
 		},
 		// type used, but field not used
 		{ctx: fakeContext(map[string][]string{
@@ -115,7 +115,7 @@ var _ foo.S = foo.S{}
 `},
 		}),
 			pkgs: []string{"bar", "foo"},
-			want: []interface{}{"(foo.S).F", "f"},
+			want: []interface{}{"(\"foo\".S).F", "f"},
 		},
 		// type used, but field not used
 		{ctx: fakeContext(map[string][]string{
@@ -133,7 +133,7 @@ var _ foo.S = foo.S{}
 `},
 		}),
 			pkgs: []string{"bar", "foo"},
-			want: []interface{}{"(foo.S).F", "f"},
+			want: []interface{}{"(\"foo\".S).F", "f"},
 		},
 		// type embedded, #4
 		{ctx: fakeContext(map[string][]string{
@@ -163,7 +163,7 @@ type I interface {
 `},
 		}),
 			pkgs: []string{"foo"},
-			want: []interface{}{"foo.I", "i"},
+			want: []interface{}{"\"foo\".I", "i"},
 		},
 		// interface satisfied only within package
 		{ctx: fakeContext(map[string][]string{
@@ -178,7 +178,7 @@ var _ i = t(0)
 `},
 		}),
 			pkgs: []string{"foo"},
-			want: []interface{}{[]interface{}{"(foo.t).F", "f"}, []interface{}{"(foo.i).F", "f"}},
+			want: []interface{}{[]interface{}{"(\"foo\".t).F", "f"}, []interface{}{"(\"foo\".i).F", "f"}},
 		},
 		// interface satisfied by struct type
 		{ctx: fakeContext(map[string][]string{
@@ -219,7 +219,7 @@ var _ foo.I = t(0)
 `},
 		}),
 			pkgs: []string{"foo", "bar"},
-			want: []interface{}{"(bar.j).G", "g"},
+			want: []interface{}{"(\"bar\".j).G", "g"},
 		},
 		// interface used in typeswitch
 		{ctx: fakeContext(map[string][]string{
@@ -321,5 +321,5 @@ func main(content string) *build.Context {
 }
 
 func formatCmd(paths []interface{}) string {
-	return fmt.Sprintf("gorename -from %s -to %s\n", paths...)
+	return fmt.Sprintf("gorename -from '%s' -to %s\n", paths...)
 }
