@@ -67,8 +67,16 @@ func (u *unexporter) usedObjects() map[types.Object]bool {
 		}
 	}
 	for key := range u.satisfy() {
-		lhs := key.LHS.(*types.Named)
-		rhs := key.RHS.(*types.Named)
+		var (
+			lhs, rhs *types.Named
+			ok       bool
+		)
+		if lhs, ok = key.LHS.(*types.Named); !ok {
+			continue
+		}
+		if rhs, ok = key.RHS.(*types.Named); !ok {
+			continue
+		}
 		// if satisfied by type within the same package only, it should not be exported
 		if lhs.Obj().Pkg() == rhs.Obj().Pkg() {
 			continue

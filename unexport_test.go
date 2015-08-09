@@ -244,6 +244,24 @@ func f(z interface{}) {
 		}),
 			pkgs: []string{"foo", "bar"},
 		},
+		// interface used by function
+		{ctx: fakeContext(map[string][]string{
+			"foo": {`
+package foo
+type I interface {
+F() int
+}
+`},
+			"bar": {`
+package bar
+import "foo"
+func f(y foo.I) int {
+return y.F()
+}
+`},
+		}),
+			pkgs: []string{"foo", "bar"},
+		},
 	} {
 		// test body
 		cmds, err := Main(test.ctx, test.pkgs)
