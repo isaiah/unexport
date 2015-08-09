@@ -321,5 +321,5 @@ func main(content string) *build.Context {
 }
 
 func formatCmd(paths []interface{}) string {
-	return fmt.Sprintf("gorename -from '%s' -to %s\n", paths...)
+	return fmt.Sprintf("-from '%s' -to %s\n", paths...)
 }

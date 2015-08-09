@@ -150,7 +150,7 @@ func Main(ctx *build.Context, pkgs []string) ([]string, error) {
 	var commands []string
 	for pkg, objs := range u.unusedObjects() {
 		for _, obj := range objs {
-			cmd := fmt.Sprintf("gorename -from %s -to %s\n", wholePath(obj, pkg, prog), lowerFirst(obj.Name()))
+			cmd := fmt.Sprintf("-from %s -to %s\n", wholePath(obj, pkg, prog), lowerFirst(obj.Name()))
 			commands = append(commands, cmd)
 		}
 	}

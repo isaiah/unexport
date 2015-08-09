@@ -8,6 +8,7 @@ import (
 	"go/build"
 	"golang.org/x/tools/go/buildutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -34,7 +35,23 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(cmds)
+	gorename, err := exec.LookPath("gorename")
+	if err != nil {
+		fmt.Println("gorename not found in PATH")
+	}
+	for _, cmd := range cmds {
+		var s string
+		fmt.Println("gorenmae "+cmd, "y/n/c/A?")
+		fmt.Scanf("%s", &s)
+		switch s {
+		case "y", "Y":
+			if err := exec.Command(gorename + " " + cmd).Run(); err != nil {
+				panic(err)
+			}
+		default:
+			continue
+		}
+	}
 }
 
 func getImportPath(ctxt *build.Context, pathOrFilename string) (string, error) {
