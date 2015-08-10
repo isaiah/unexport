@@ -45,17 +45,30 @@ func main() {
 		panic(err)
 	}
 
+	var runall bool
 	// apply the changes
 	for from, to := range renames {
-		var s string
-		fmt.Printf("unexport %s, y/n/c/A? ", from)
-		fmt.Scanf("%s", &s)
-		switch s {
-		case "y", "Y":
+		if runall {
 			if err := rename.Main(ctxt, "", from, to); err != nil {
 				if err != nil {
 					panic(err)
 				}
+			}
+			continue
+		}
+
+		var s string
+		fmt.Printf("unexport %s, y/n/c/A? ", from)
+		fmt.Scanf("%s", &s)
+		switch s {
+		case "y", "Y", "A":
+			if err := rename.Main(ctxt, "", from, to); err != nil {
+				if err != nil {
+					panic(err)
+				}
+			}
+			if s == "A" {
+				runall = true
 			}
 		case "c":
 			os.Exit(1)

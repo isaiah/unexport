@@ -7,7 +7,6 @@ import (
 	"golang.org/x/tools/go/types"
 	"golang.org/x/tools/go/types/typeutil"
 	"golang.org/x/tools/refactor/satisfy"
-	"log"
 )
 
 type unexporter struct {
@@ -153,21 +152,4 @@ func Main(ctx *build.Context, pkgs []string) (identifiers map[string]string, err
 		}
 	}
 	return
-}
-
-func printImported(prog *loader.Program) {
-	for name, pkginfo := range prog.Imported {
-		log.Printf("imported %s => %v\n", name, pkginfo)
-	}
-}
-
-func printInitialPackages(prog *loader.Program) {
-	for _, pkg := range prog.InitialPackages() {
-		log.Printf("find package: %v", pkg)
-		for id, obj := range pkg.Defs {
-			if id.IsExported() {
-				log.Printf("%v => %v\n", id, obj)
-			}
-		}
-	}
 }
