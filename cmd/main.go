@@ -1,29 +1,30 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
 	"github.com/isaiah/unexport"
 	"go/build"
 	"golang.org/x/tools/go/buildutil"
+	"golang.org/x/tools/refactor/rename"
+	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
 var (
-	safe         = flag.Bool("safe", false, "only look for internal packages")
-	dryRun       = flag.Bool("dryrun", false, "show the changes, but do not apply them")
-	verbose      = flag.Bool("v", false, "print verbose information, including gorename output")
-	extraVerbose = flag.Bool("vv", false, "print extra verbose information, this will set gorename to verbose mode")
-	helpFlag     = flag.Bool("help", false, "show usage message")
+	safe     = flag.Bool("safe", false, "only look for internal packages")
+	helpFlag = flag.Bool("help", false, "show usage message")
 
 	errNotGoSourcePath = errors.New("path is not under GOROOT or GOPATH")
 )
 
 func init() {
+	flag.BoolVar(&rename.DryRun, "dryrun", false, "show the changes, but do not apply them")
+	flag.BoolVar(&rename.Verbose, "v", false, "print extra verbose information, this will set gorename to verbose mode")
 }
 
 func main() {
@@ -39,33 +40,22 @@ func main() {
 	} else {
 		path = flag.Args()
 	}
-	cmds, err := unexport.Main(ctxt, path)
+	renames, err := unexport.Main(ctxt, path)
 	if err != nil {
 		panic(err)
 	}
-	gorename, err := exec.LookPath("gorename")
-	if err != nil {
-		fmt.Println("gorename not found in PATH")
-	}
-	for from, to := range cmds {
+
+	// apply the changes
+	for from, to := range renames {
 		var s string
-		fmt.Printf("unexport %s, y/n/c/A?", from)
+		fmt.Printf("unexport %s, y/n/c/A? ", from)
 		fmt.Scanf("%s", &s)
 		switch s {
 		case "y", "Y":
-			args := []string{"-from", from, "-to", to}
-			if *dryRun {
-				args = append(args, "-dryrun")
-			}
-			if *extraVerbose {
-				args = append(args, "-v")
-			}
-			output, err := exec.Command(gorename, args...).CombinedOutput()
-			if err != nil {
-				panic(err)
-			}
-			if *verbose || *extraVerbose || *dryRun {
-				fmt.Println(string(output))
+			if err := rename.Main(ctxt, "", from, to); err != nil {
+				if err != nil {
+					panic(err)
+				}
 			}
 		case "c":
 			os.Exit(1)
@@ -115,4 +105,36 @@ func getwdPackages(ctxt *build.Context) (folders []string) {
 		panic(err)
 	}
 	return
+}
+
+func checkConflicts(ctxt *build.Context, renames map[string]string) <-chan string {
+	dryrun := rename.DryRun
+	rename.DryRun = true
+	stderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+	warnings := make(chan string)
+	defer func(dryrun bool) {
+		r.Close()
+		w.Close()
+		rename.DryRun = dryrun
+		os.Stderr = stderr
+	}(dryrun)
+
+	go func() {
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		warnings <- buf.String()
+	}()
+	fmt.Println("start checking")
+	for from, to := range renames {
+		if err := rename.Main(ctxt, "", from, to); err != nil {
+			if err != rename.ConflictError {
+				fmt.Fprintf(stderr, "unexport: %s\n", err)
+				os.Exit(1)
+			}
+			fmt.Println(from, "conflicts")
+		}
+	}
+	return warnings
 }

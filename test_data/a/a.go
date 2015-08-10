@@ -12,6 +12,7 @@ var (
 const (
 	UsedConst   = 3
 	UnusedConst = 4
+	unusedConst = 5
 )
 
 type C interface {
