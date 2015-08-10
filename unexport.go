@@ -1,7 +1,6 @@
 package unexport
 
 import (
-	"fmt"
 	"go/ast"
 	"go/build"
 	"golang.org/x/tools/go/loader"
@@ -139,22 +138,21 @@ func loadProgram(ctx *build.Context, pkgs []string) (*loader.Program, error) {
 }
 
 // Main The main entrance of the program, used by the CLI
-func Main(ctx *build.Context, pkgs []string) ([]string, error) {
+func Main(ctx *build.Context, pkgs []string) (identifiers map[string]string, err error) {
 	prog, err := loadProgram(ctx, pkgs)
 
 	if err != nil {
-		log.Fatal(err)
+		return
 	}
 	u := &unexporter{packages: prog.Imported}
 
-	var commands []string
+	identifiers = make(map[string]string)
 	for pkg, objs := range u.unusedObjects() {
 		for _, obj := range objs {
-			cmd := fmt.Sprintf("-from %s -to %s\n", wholePath(obj, pkg, prog), lowerFirst(obj.Name()))
-			commands = append(commands, cmd)
+			identifiers[wholePath(obj, pkg, prog)] = lowerFirst(obj.Name())
 		}
 	}
-	return commands, nil
+	return
 }
 
 func printImported(prog *loader.Program) {

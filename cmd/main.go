@@ -7,6 +7,7 @@ import (
 	"github.com/isaiah/unexport"
 	"go/build"
 	"golang.org/x/tools/go/buildutil"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,15 +40,19 @@ func main() {
 	if err != nil {
 		fmt.Println("gorename not found in PATH")
 	}
-	for _, cmd := range cmds {
+	for from, to := range cmds {
 		var s string
-		fmt.Println("gorenmae "+cmd, "y/n/c/A?")
+		fmt.Printf("unexport %s, y/n/c/A?", from)
 		fmt.Scanf("%s", &s)
 		switch s {
 		case "y", "Y":
-			if err := exec.Command(gorename + " " + cmd).Run(); err != nil {
+			args := []string{"-from", from, "-to", to}
+			if output, err := exec.Command(gorename, args...).CombinedOutput(); err != nil {
+				log.Printf("%#v", string(output))
 				panic(err)
 			}
+		case "c":
+			os.Exit(1)
 		default:
 			continue
 		}

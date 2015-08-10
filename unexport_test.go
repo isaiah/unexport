@@ -49,38 +49,38 @@ func TestUnusedIdentifiers(t *testing.T) {
 	for _, test := range []struct {
 		ctx  *build.Context
 		pkgs []string
-		want []interface{}
+		want map[string]string
 	}{
 		// init data
 		// unused var
 		{ctx: main(`package main; var Unused int = 1`),
 			pkgs: []string{"main"},
-			want: []interface{}{"\"main\".Unused", "unused"},
+			want: map[string]string{"\"main\".Unused": "unused"},
 		},
 		// unused const
 		{ctx: main(`package main; const Unused int = 1`),
 			pkgs: []string{"main"},
-			want: []interface{}{"\"main\".Unused", "unused"},
+			want: map[string]string{"\"main\".Unused": "unused"},
 		},
 		// unused type
 		{ctx: main(`package main; type S int`),
 			pkgs: []string{"main"},
-			want: []interface{}{"\"main\".S", "s"},
+			want: map[string]string{"\"main\".S": "s"},
 		},
 		// unused type field
 		{ctx: main(`package main; type s struct { T int }`),
 			pkgs: []string{"main"},
-			want: []interface{}{"(\"main\".s).T", "t"},
+			want: map[string]string{"(\"main\".s).T": "t"},
 		},
 		// unused type method
 		{ctx: main(`package main; type s int; func (s) F(){}`),
 			pkgs: []string{"main"},
-			want: []interface{}{"(\"main\".s).F", "f"},
+			want: map[string]string{"(\"main\".s).F": "f"},
 		},
 		// unused interface method
 		{ctx: main(`package main; type s interface { F() }`),
 			pkgs: []string{"main"},
-			want: []interface{}{"(\"main\".s).F", "f"},
+			want: map[string]string{"(\"main\".s).F": "f"},
 		},
 		// type used by function
 		{ctx: fakeContext(map[string][]string{
@@ -97,7 +97,7 @@ func f(t *foo.T) {}
 `},
 		}),
 			pkgs: []string{"bar", "foo"},
-			want: []interface{}{"\"foo\".S", "s"},
+			want: map[string]string{"\"foo\".S": "s"},
 		},
 		// type used, but field not used
 		{ctx: fakeContext(map[string][]string{
@@ -115,7 +115,7 @@ var _ foo.S = foo.S{}
 `},
 		}),
 			pkgs: []string{"bar", "foo"},
-			want: []interface{}{"(\"foo\".S).F", "f"},
+			want: map[string]string{"(\"foo\".S).F": "f"},
 		},
 		// type used, but field not used
 		{ctx: fakeContext(map[string][]string{
@@ -133,7 +133,7 @@ var _ foo.S = foo.S{}
 `},
 		}),
 			pkgs: []string{"bar", "foo"},
-			want: []interface{}{"(\"foo\".S).F", "f"},
+			want: map[string]string{"(\"foo\".S).F": "f"},
 		},
 		// type embedded, #4
 		{ctx: fakeContext(map[string][]string{
@@ -163,7 +163,7 @@ type I interface {
 `},
 		}),
 			pkgs: []string{"foo"},
-			want: []interface{}{"\"foo\".I", "i"},
+			want: map[string]string{"\"foo\".I": "i"},
 		},
 		// interface satisfied only within package
 		{ctx: fakeContext(map[string][]string{
@@ -178,7 +178,7 @@ var _ i = t(0)
 `},
 		}),
 			pkgs: []string{"foo"},
-			want: []interface{}{[]interface{}{"(\"foo\".t).F", "f"}, []interface{}{"(\"foo\".i).F", "f"}},
+			want: map[string]string{"(\"foo\".t).F": "f", "(\"foo\".i).F": "f"},
 		},
 		// interface satisfied by struct type
 		{ctx: fakeContext(map[string][]string{
@@ -219,7 +219,7 @@ var _ foo.I = t(0)
 `},
 		}),
 			pkgs: []string{"foo", "bar"},
-			want: []interface{}{"(\"bar\".j).G", "g"},
+			want: map[string]string{"(\"bar\".j).G": "g"},
 		},
 		// interface used in typeswitch
 		{ctx: fakeContext(map[string][]string{
@@ -270,14 +270,11 @@ return y.F()
 		}
 		if len(cmds) > 1 {
 			var concated string
-			for _, c := range cmds {
-				concated += c
+			for k, v := range cmds {
+				concated += formatCmd(map[string]string{k: v})
 			}
-			for _, w := range test.want {
-				want, ok := w.([]interface{})
-				if !ok {
-					t.Fatal("test.want should be an array")
-				}
+			for k, v := range test.want {
+				want := map[string]string{k: v}
 				if !strings.Contains(concated, formatCmd(want)) {
 					t.Errorf("command %s is not returned", formatCmd(want))
 				}
@@ -286,8 +283,8 @@ return y.F()
 			if len(test.want) > 0 {
 				if len(cmds) == 0 {
 					t.Errorf("expected %s, got none", formatCmd(test.want))
-				} else if cmds[0] != formatCmd(test.want) {
-					t.Errorf("expected %s, got %s", formatCmd(test.want), cmds[0])
+				} else if formatCmd(cmds) != formatCmd(test.want) {
+					t.Errorf("expected %s, got %s", formatCmd(test.want), formatCmd(cmds))
 				}
 			} else {
 				if len(cmds) > 0 {
@@ -320,6 +317,9 @@ func main(content string) *build.Context {
 	return fakeContext(map[string][]string{"main": {content}})
 }
 
-func formatCmd(paths []interface{}) string {
-	return fmt.Sprintf("-from '%s' -to %s\n", paths...)
+func formatCmd(pair map[string]string) string {
+	for k, v := range pair {
+		return fmt.Sprintf("gorename -from %s -to %s\n", k, v)
+	}
+	return ""
 }
