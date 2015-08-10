@@ -7,7 +7,6 @@ import (
 	"github.com/isaiah/unexport"
 	"go/build"
 	"golang.org/x/tools/go/buildutil"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,16 +14,24 @@ import (
 )
 
 var (
-	safe               bool
+	safe         = flag.Bool("safe", false, "only look for internal packages")
+	dryRun       = flag.Bool("dryrun", false, "show the changes, but do not apply them")
+	verbose      = flag.Bool("v", false, "print verbose information, including gorename output")
+	extraVerbose = flag.Bool("vv", false, "print extra verbose information, this will set gorename to verbose mode")
+	helpFlag     = flag.Bool("help", false, "show usage message")
+
 	errNotGoSourcePath = errors.New("path is not under GOROOT or GOPATH")
 )
 
 func init() {
-	flag.BoolVar(&safe, "safe", false, "Safe mode")
 }
 
 func main() {
 	flag.Parse()
+	if *helpFlag {
+		flag.Usage()
+		return
+	}
 	ctxt := &build.Default
 	var path []string
 	if len(flag.Args()) == 0 {
@@ -47,9 +54,18 @@ func main() {
 		switch s {
 		case "y", "Y":
 			args := []string{"-from", from, "-to", to}
-			if output, err := exec.Command(gorename, args...).CombinedOutput(); err != nil {
-				log.Printf("%#v", string(output))
+			if *dryRun {
+				args = append(args, "-dryrun")
+			}
+			if *extraVerbose {
+				args = append(args, "-v")
+			}
+			output, err := exec.Command(gorename, args...).CombinedOutput()
+			if err != nil {
 				panic(err)
+			}
+			if *verbose || *extraVerbose || *dryRun {
+				fmt.Println(string(output))
 			}
 		case "c":
 			os.Exit(1)
