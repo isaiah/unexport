@@ -7,6 +7,7 @@ import (
 	"github.com/isaiah/unexport"
 	"go/build"
 	"golang.org/x/tools/go/buildutil"
+	"golang.org/x/tools/go/types"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,20 +51,38 @@ func main() {
 
 		var s string
 		if info.Warning == "" {
-			fmt.Printf("unexport %s, y/n/c/A? ", info.Qualifier)
+			fmt.Printf("unexport %s, y/n/r/c/A? ", info.Qualifier)
 		} else {
-			fmt.Printf("unexport %s causes conflicts\n%s, \ny/n/c/A? ", info.Qualifier, info.Warning)
+			fmt.Printf("unexport %s causes conflicts\n%s, \nr/c/A? ", info.Qualifier, info.Warning)
 		}
 		fmt.Scanf("%s", &s)
 		switch s {
 		case "y", "Y":
 			unexporter.Update(obj)
+		case "r":
+			rename(unexporter, obj, info)
 		case "c":
 			os.Exit(1)
 		default:
 			continue
 		}
 	}
+}
+
+func rename(unexporter *unexport.Unexporter, obj types.Object, info *unexport.ObjectInfo) {
+	var to string
+	fmt.Printf("please input an alternative name: ")
+	fmt.Scanf("%s", &to)
+	warnings := unexporter.Check(obj, to)
+	if warnings == "" {
+		unexporter.Update(obj)
+	} else {
+		fmt.Printf("rename %s to %s still causes conflicts\n%s,\nr/c/A? ",
+			info.Qualifier, warnings)
+		// recursive
+		rename(unexporter, obj, info)
+	}
+
 }
 
 func getImportPath(ctxt *build.Context, pathOrFilename string) (string, error) {

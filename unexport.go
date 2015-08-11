@@ -16,6 +16,9 @@ import (
 
 var (
 	Verbose bool
+	Usage   = `
+	The unexport command first display the overall information, and highten the potential naming conflicts as a result of the renaming, then it prompt the interactive command line to allow confirm each renaming items. It also offers opportunity to change the resulting name, by default it only downcase the first letter of the original name.
+	`
 )
 
 func (u *Unexporter) unusedObjects() []types.Object {
@@ -199,6 +202,20 @@ func (u *Unexporter) UpdateAll() error {
 		}
 	}
 	return u.update(objsToUpdate)
+}
+
+func (u *Unexporter) Check(from types.Object, to string) string {
+	objsToUpdate := make(map[types.Object]string)
+	u.warnings = make(chan map[types.Object]string)
+	u.check(objsToUpdate, from, to)
+	close(u.warnings)
+	u.objsToUpdate[from] = objsToUpdate
+	for ws := range u.warnings {
+		for _, warning := range ws {
+			return warning
+		}
+	}
+	return ""
 }
 
 // This is copy & pasted from x/tools/refactor/rename
