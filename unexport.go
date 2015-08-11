@@ -5,39 +5,20 @@ import (
 	"go/build"
 	"golang.org/x/tools/go/loader"
 	"golang.org/x/tools/go/types"
-	"golang.org/x/tools/go/types/typeutil"
-	"golang.org/x/tools/refactor/satisfy"
+	"golang.org/x/tools/refactor/importgraph"
+	"log"
 )
 
-type unexporter struct {
-	packages           map[string]*loader.PackageInfo
-	satisfyConstraints map[satisfy.Constraint]bool
-	msets              typeutil.MethodSetCache
-}
-
-// satisfy copied from x/tools/refactor/rename
-// Find the satisfy relationship, all interface satisfied should be exported
-func (u *unexporter) satisfy() map[satisfy.Constraint]bool {
-	if u.satisfyConstraints == nil {
-		var f satisfy.Finder
-		for _, info := range u.packages {
-			f.Find(&info.Info, info.Files)
-		}
-		u.satisfyConstraints = f.Result
-	}
-	return u.satisfyConstraints
-}
-
-func (u *unexporter) unusedObjects() map[*types.Package][]types.Object {
+func (u *unexporter) unusedObjects() map[string][]types.Object {
 	used := u.usedObjects()
-	objs := make(map[*types.Package][]types.Object)
+	objs := make(map[string][]types.Object)
 	for _, pkgInfo := range u.packages {
 		for id, obj := range pkgInfo.Defs {
 			if used[obj] {
 				continue
 			}
 			if id.IsExported() {
-				objs[pkgInfo.Pkg] = append(objs[pkgInfo.Pkg], obj)
+				objs[pkgInfo.Pkg.Path()] = append(objs[pkgInfo.Pkg.Path()], obj)
 			}
 		}
 	}
@@ -137,19 +118,75 @@ func loadProgram(ctx *build.Context, pkgs []string) (*loader.Program, error) {
 }
 
 // Main The main entrance of the program, used by the CLI
-func Main(ctx *build.Context, pkgs []string) (identifiers map[string]string, err error) {
+func Main(ctx *build.Context, path string) (identifiers map[string]string, err error) {
+	pkgs := scanWorkspace(ctx, path)
 	prog, err := loadProgram(ctx, pkgs)
 
 	if err != nil {
 		return
 	}
-	u := &unexporter{packages: prog.Imported}
+	u := &unexporter{
+		iprog:        prog,
+		objsToUpdate: make(map[types.Object]bool),
+		packages:     make(map[*types.Package]*loader.PackageInfo),
+		warnings:     make(chan string),
+	}
+
+	for _, info := range prog.Imported {
+		u.packages[info.Pkg] = info
+	}
+
+	for _, info := range prog.Created {
+		u.packages[info.Pkg] = info
+	}
 
 	identifiers = make(map[string]string)
-	for pkg, objs := range u.unusedObjects() {
-		for _, obj := range objs {
-			identifiers[wholePath(obj, pkg, prog)] = lowerFirst(obj.Name())
+	objs := make(chan map[types.Object]bool)
+	unusedObjs := u.unusedObjects()[path]
+	for _, obj := range unusedObjs {
+		toName := lowerFirst(obj.Name())
+		go func(obj types.Object, toName string) {
+			objsToUpdate := make(map[types.Object]bool)
+			u.check(objsToUpdate, obj, toName)
+			objs <- objsToUpdate
+		}(obj, toName)
+
+		identifiers[wholePath(obj, path, prog)] = toName
+	}
+	// do it in another goroutine, or the write to u.warnings is blocked since it's a non-buffered channel
+	go func() {
+		for i := 0; i < len(unusedObjs); i++ {
+			for obj, t := range <-objs {
+				u.objsToUpdate[obj] = t
+			}
 		}
+		close(objs)
+		close(u.warnings)
+	}()
+	for warning := range u.warnings {
+		log.Println(warning)
 	}
 	return
+}
+
+func scanWorkspace(ctxt *build.Context, path string) []string {
+	// Scan the workspace and build the import graph.
+	_, rev, errors := importgraph.Build(ctxt)
+	if len(errors) > 0 {
+		// With a large GOPATH tree, errors are inevitable.
+		// Report them but proceed.
+		log.Printf("While scanning Go workspace:\n")
+		for path, err := range errors {
+			log.Printf("Package %q: %s.\n", path, err)
+		}
+	}
+
+	// Enumerate the set of potentially affected packages.
+	var affectedPackages []string
+	// External test packages are never imported,
+	// so they will never appear in the graph.
+	for pkg := range rev.Search(path) {
+		affectedPackages = append(affectedPackages, pkg)
+	}
+	return affectedPackages
 }

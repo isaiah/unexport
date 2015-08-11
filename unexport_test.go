@@ -4,14 +4,16 @@ import (
 	"fmt"
 	"go/build"
 	"golang.org/x/tools/go/buildutil"
+	"golang.org/x/tools/go/loader"
+	"golang.org/x/tools/go/types"
 	"strings"
 	"testing"
 )
 
 func TestUsedIdentifiers(t *testing.T) {
 	for _, test := range []struct {
-		ctx  *build.Context
-		pkgs []string
+		ctx *build.Context
+		pkg string
 	}{
 		{ctx: fakeContext(
 			map[string][]string{
@@ -30,14 +32,21 @@ var _ foo.I = s(0)
 `},
 			},
 		),
-			pkgs: []string{"foo", "bar"},
+			pkg: "bar",
 		},
 	} {
-		prog, err := loadProgram(test.ctx, test.pkgs)
+		prog, err := loadProgram(test.ctx, []string{test.pkg})
 		if err != nil {
 			t.Fatal(err)
 		}
-		u := &unexporter{packages: prog.Imported}
+		u := &unexporter{
+			iprog:        prog,
+			packages:     make(map[*types.Package]*loader.PackageInfo),
+			objsToUpdate: make(map[types.Object]bool),
+		}
+		for _, info := range prog.Imported {
+			u.packages[info.Pkg] = info
+		}
 		used := u.usedObjects()
 		if len(used) != 3 {
 			t.Errorf("expected 3 used objects, got %v", used)
@@ -48,38 +57,38 @@ var _ foo.I = s(0)
 func TestUnusedIdentifiers(t *testing.T) {
 	for _, test := range []struct {
 		ctx  *build.Context
-		pkgs []string
+		pkg  string
 		want map[string]string
 	}{
 		// init data
 		// unused var
 		{ctx: main(`package main; var Unused int = 1`),
-			pkgs: []string{"main"},
+			pkg:  "main",
 			want: map[string]string{"\"main\".Unused": "unused"},
 		},
 		// unused const
 		{ctx: main(`package main; const Unused int = 1`),
-			pkgs: []string{"main"},
+			pkg:  "main",
 			want: map[string]string{"\"main\".Unused": "unused"},
 		},
 		// unused type
 		{ctx: main(`package main; type S int`),
-			pkgs: []string{"main"},
+			pkg:  "main",
 			want: map[string]string{"\"main\".S": "s"},
 		},
 		// unused type field
 		{ctx: main(`package main; type s struct { T int }`),
-			pkgs: []string{"main"},
+			pkg:  "main",
 			want: map[string]string{"(\"main\".s).T": "t"},
 		},
 		// unused type method
 		{ctx: main(`package main; type s int; func (s) F(){}`),
-			pkgs: []string{"main"},
+			pkg:  "main",
 			want: map[string]string{"(\"main\".s).F": "f"},
 		},
 		// unused interface method
 		{ctx: main(`package main; type s interface { F() }`),
-			pkgs: []string{"main"},
+			pkg:  "main",
 			want: map[string]string{"(\"main\".s).F": "f"},
 		},
 		// type used by function
@@ -96,7 +105,7 @@ import "foo"
 func f(t *foo.T) {}
 `},
 		}),
-			pkgs: []string{"bar", "foo"},
+			pkg:  "foo",
 			want: map[string]string{"\"foo\".S": "s"},
 		},
 		// type used, but field not used
@@ -114,7 +123,7 @@ import "foo"
 var _ foo.S = foo.S{}
 `},
 		}),
-			pkgs: []string{"bar", "foo"},
+			pkg:  "foo",
 			want: map[string]string{"(\"foo\".S).F": "f"},
 		},
 		// type used, but field not used
@@ -132,7 +141,7 @@ import "foo"
 var _ foo.S = foo.S{}
 `},
 		}),
-			pkgs: []string{"bar", "foo"},
+			pkg:  "foo",
 			want: map[string]string{"(\"foo\".S).F": "f"},
 		},
 		// type embedded, #4
@@ -152,7 +161,7 @@ type x struct {
 }
 `},
 		}),
-			pkgs: []string{"bar", "foo"},
+			pkg: "foo",
 		},
 		// unused interface type
 		{ctx: fakeContext(map[string][]string{
@@ -162,7 +171,7 @@ type I interface {
 }
 `},
 		}),
-			pkgs: []string{"foo"},
+			pkg:  "foo",
 			want: map[string]string{"\"foo\".I": "i"},
 		},
 		// interface satisfied only within package
@@ -177,7 +186,7 @@ func (t) F() {}
 var _ i = t(0)
 `},
 		}),
-			pkgs: []string{"foo"},
+			pkg:  "foo",
 			want: map[string]string{"(\"foo\".t).F": "f", "(\"foo\".i).F": "f"},
 		},
 		// interface satisfied by struct type
@@ -196,7 +205,7 @@ func (t) F() {}
 var _ foo.I = t(0)
 `},
 		}),
-			pkgs: []string{"foo", "bar"},
+			pkg: "foo",
 		},
 		// interface satisfied by interface
 		{ctx: fakeContext(map[string][]string{
@@ -218,7 +227,7 @@ func (t) F() {}
 var _ foo.I = t(0)
 `},
 		}),
-			pkgs: []string{"foo", "bar"},
+			pkg:  "bar",
 			want: map[string]string{"(\"bar\".j).G": "g"},
 		},
 		// interface used in typeswitch
@@ -242,7 +251,7 @@ func f(z interface{}) {
 }
 `},
 		}),
-			pkgs: []string{"foo", "bar"},
+			pkg: "foo",
 		},
 		// interface used by function
 		{ctx: fakeContext(map[string][]string{
@@ -260,11 +269,11 @@ return y.F()
 }
 `},
 		}),
-			pkgs: []string{"foo", "bar"},
+			pkg: "foo",
 		},
 	} {
 		// test body
-		cmds, err := Main(test.ctx, test.pkgs)
+		cmds, err := Main(test.ctx, test.pkg)
 		if err != nil {
 			t.Fatal(err)
 		}

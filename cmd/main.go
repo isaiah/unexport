@@ -34,11 +34,11 @@ func main() {
 		return
 	}
 	ctxt := &build.Default
-	var path []string
+	var path string
 	if len(flag.Args()) == 0 {
 		path = getwdPackages(ctxt)
 	} else {
-		path = flag.Args()
+		path = flag.Args()[0]
 	}
 	renames, err := unexport.Main(ctxt, path)
 	if err != nil {
@@ -92,7 +92,7 @@ func getImportPath(ctxt *build.Context, pathOrFilename string) (string, error) {
 	return "", errNotGoSourcePath
 }
 
-func getwdPackages(ctxt *build.Context) (folders []string) {
+func getwdPackages(ctxt *build.Context) string {
 	wd, err := os.Getwd()
 	if err != nil {
 		panic(err)
@@ -101,23 +101,11 @@ func getwdPackages(ctxt *build.Context) (folders []string) {
 		flag.Usage()
 		os.Exit(1)
 	}
-	err = filepath.Walk(wd, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() && !strings.Contains(path, ".git") {
-			importPath, err := getImportPath(ctxt, path)
-			if err != nil {
-				return err
-			}
-			folders = append(folders, importPath)
-		}
-		return nil
-	})
+	importPath, err := getImportPath(ctxt, wd)
 	if err != nil {
 		panic(err)
 	}
-	return
+	return importPath
 }
 
 func checkConflicts(ctxt *build.Context, renames map[string]string) <-chan string {
