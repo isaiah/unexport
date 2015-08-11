@@ -39,7 +39,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	renames := unexporter.Identifiers
 
 	if *runall {
 		unexporter.UpdateAll()
@@ -47,10 +46,14 @@ func main() {
 	}
 
 	// apply the changes
-	for obj, qualifier := range renames {
+	for obj, info := range unexporter.Identifiers {
 
 		var s string
-		fmt.Printf("unexport %s, y/n/c/A? ", qualifier)
+		if info.Warning == "" {
+			fmt.Printf("unexport %s, y/n/c/A? ", info.Qualifier)
+		} else {
+			fmt.Printf("unexport %s causes conflicts\n%s, \ny/n/c/A? ", info.Qualifier, info.Warning)
+		}
 		fmt.Scanf("%s", &s)
 		switch s {
 		case "y", "Y":

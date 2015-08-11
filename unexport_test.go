@@ -281,7 +281,7 @@ return y.F()
 		if len(cmds) > 1 {
 			var concated string
 			for k, v := range cmds {
-				concated += formatCmd(map[string]string{v: k.Name()})
+				concated += formatCmd(map[string]string{v.Qualifier: k.Name()})
 			}
 			for k, v := range test.want {
 				want := map[string]string{k: v}
@@ -295,8 +295,8 @@ return y.F()
 					t.Errorf("expected %s, got none", formatCmd(test.want))
 				} else {
 					arg := make(map[string]string)
-					for obj, qualifier := range cmds {
-						arg[qualifier] = obj.Name()
+					for obj, info := range cmds {
+						arg[info.Qualifier] = obj.Name()
 					}
 					if formatCmd(arg) != formatCmd(test.want) {
 						t.Errorf("expected %s, got %s", formatCmd(test.want), formatCmd(arg))

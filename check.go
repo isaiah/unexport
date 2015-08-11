@@ -15,6 +15,12 @@ import (
 
 // Content of this file is copy & pasted from x/tools/refactor/rename,
 // Because the check method nor the rename.reportError method are exported
+// Ideally two interfaces should be exported by x/tools/refactor/rename
+// * the check interface, but it should be thread-safe, as to support checking multiple object concurrently
+//     it should return the collision errors instead of print to IO, preferrablly the renamer.errorf method should be atomic
+// * the update interface, it should accept the affected packages for context and objects to update for bulk update
+// Things I don't like:
+// fmt.Fprintf(os.Stderr, ....) is very ugly, export a `ReportError` interface is OK, but use the `log` package is probably better?
 
 type Unexporter struct {
 	path               string
@@ -24,8 +30,13 @@ type Unexporter struct {
 	packages           map[*types.Package]*loader.PackageInfo // subset of iprog.AllPackages to inspect
 	msets              typeutil.MethodSetCache
 	satisfyConstraints map[satisfy.Constraint]bool
-	warnings           chan string
-	Identifiers        map[types.Object]string
+	warnings           chan map[types.Object]string
+	Identifiers        map[types.Object]*ObjectInfo
+}
+
+type ObjectInfo struct {
+	Qualifier string
+	Warning   string
 }
 
 func (r *Unexporter) check(objsToUpdate map[types.Object]string, from types.Object, to string) {
@@ -63,10 +74,11 @@ func (r *Unexporter) checkInFileBlock(objsToUpdate map[types.Object]string, from
 
 	// Check for conflicts between file and package block.
 	if prev := from.Pkg().Scope().Lookup(to); prev != nil {
-		r.errorf(from.Pos(), "renaming this %s %q to %q would conflict",
-			objectKind(from), from.Name(), to)
-		r.errorf(prev.Pos(), "\twith this package member %s",
-			objectKind(prev))
+		r.warn(from,
+			r.errorf(from.Pos(), "renaming this %s %q to %q would conflict",
+				objectKind(from), from.Name(), to),
+			r.errorf(prev.Pos(), "\twith this package member %s",
+				objectKind(prev)))
 		return // since checkInPackageBlock would report redundant errors
 	}
 
@@ -113,24 +125,26 @@ func (r *Unexporter) checkInPackageBlock(objsToUpdate map[types.Object]string, f
 		if kind == "func" {
 			// Reject if intra-package references to it exist.
 			if refs := lexinfo.Refs[from]; len(refs) > 0 {
-				r.errorf(from.Pos(),
-					"renaming this func %q to %q would make it a package initializer",
-					from.Name(), to)
-				r.errorf(refs[0].Id.Pos(), "\tbut references to it exist")
+				r.warn(from,
+					r.errorf(from.Pos(),
+						"renaming this func %q to %q would make it a package initializer",
+						from.Name(), to),
+					r.errorf(refs[0].Id.Pos(), "\tbut references to it exist"))
 			}
 		} else {
-			r.errorf(from.Pos(), "you cannot have a %s at package level named %q",
-				kind, to)
+			r.warn(from, r.errorf(from.Pos(), "you cannot have a %s at package level named %q",
+				kind, to))
 		}
 	}
 
 	// Check for conflicts between package block and all file blocks.
 	for _, f := range info.Files {
 		if prev, b := lexinfo.Blocks[f].Lookup(to); b == lexinfo.Blocks[f] {
-			r.errorf(from.Pos(), "renaming this %s %q to %q would conflict",
-				objectKind(from), from.Name(), to)
-			r.errorf(prev.Pos(), "\twith this %s",
-				objectKind(prev))
+			r.warn(from,
+				r.errorf(from.Pos(), "renaming this %s %q to %q would conflict",
+					objectKind(from), from.Name(), to),
+				r.errorf(prev.Pos(), "\twith this %s",
+					objectKind(prev)))
 			return // since checkInPackageBlock would report redundant errors
 		}
 	}
@@ -216,10 +230,11 @@ func (r *Unexporter) checkInLexicalScope(objsToUpdate map[types.Object]string, f
 		to, toBlock := b.Lookup(to)
 		if toBlock == b {
 			// same-block conflict
-			r.errorf(from.Pos(), "renaming this %s %q to %q",
-				objectKind(from), from.Name(), to)
-			r.errorf(to.Pos(), "\tconflicts with %s in same block",
-				objectKind(to))
+			r.warn(from,
+				r.errorf(from.Pos(), "renaming this %s %q to %q",
+					objectKind(from), from.Name(), to),
+				r.errorf(to.Pos(), "\tconflicts with %s in same block",
+					objectKind(to)))
 			return
 		} else if toBlock != nil {
 			// Check for super-block conflict.
@@ -228,11 +243,12 @@ func (r *Unexporter) checkInLexicalScope(objsToUpdate map[types.Object]string, f
 			for _, ref := range lexinfo.Refs[to] {
 				if obj, _ := ref.Env.Lookup(from.Name()); obj == from {
 					// super-block conflict
-					r.errorf(from.Pos(), "renaming this %s %q to %q",
-						objectKind(from), from.Name(), to)
-					r.errorf(ref.Id.Pos(), "\twould shadow this reference")
-					r.errorf(to.Pos(), "\tto the %s declared here",
-						objectKind(to))
+					r.warn(from,
+						r.errorf(from.Pos(), "renaming this %s %q to %q",
+							objectKind(from), from.Name(), to),
+						r.errorf(ref.Id.Pos(), "\twould shadow this reference"),
+						r.errorf(to.Pos(), "\tto the %s declared here",
+							objectKind(to)))
 					return
 				}
 			}
@@ -252,11 +268,12 @@ func (r *Unexporter) checkInLexicalScope(objsToUpdate map[types.Object]string, f
 		if to != nil {
 			// sub-block conflict
 			if toBlock.Depth() > fromDepth {
-				r.errorf(from.Pos(), "renaming this %s %q to %q",
-					objectKind(from), from.Name(), to)
-				r.errorf(ref.Id.Pos(), "\twould cause this reference to become shadowed")
-				r.errorf(to.Pos(), "\tby this intervening %s definition",
-					objectKind(to))
+				r.warn(from,
+					r.errorf(from.Pos(), "renaming this %s %q to %q",
+						objectKind(from), from.Name(), to),
+					r.errorf(ref.Id.Pos(), "\twould cause this reference to become shadowed"),
+					r.errorf(to.Pos(), "\tby this intervening %s definition",
+						objectKind(to)))
 				return
 			}
 		}
@@ -282,8 +299,9 @@ func (r *Unexporter) checkLabel(label *types.Label, to string) {
 	// Check there are no identical labels in the function's label block.
 	// (Label blocks don't nest, so this is easy.)
 	if prev := label.Parent().Lookup(to); prev != nil {
-		r.errorf(label.Pos(), "renaming this label %q to %q", label.Name(), prev.Name())
-		r.errorf(prev.Pos(), "\twould conflict with this one")
+		r.warn(label,
+			r.errorf(label.Pos(), "renaming this label %q to %q", label.Name(), prev.Name()),
+			r.errorf(prev.Pos(), "\twould conflict with this one"))
 	}
 }
 
@@ -326,10 +344,11 @@ func (r *Unexporter) checkStructField(objsToUpdate map[types.Object]string, from
 		named := info.Defs[spec.Name].Type()
 		prev, indices, _ := types.LookupFieldOrMethod(named, true, info.Pkg, to)
 		if len(indices) == 1 {
-			r.errorf(from.Pos(), "renaming this field %q to %q",
-				from.Name(), to)
-			r.errorf(prev.Pos(), "\twould conflict with this %s",
-				objectKind(prev))
+			r.warn(from,
+				r.errorf(from.Pos(), "renaming this field %q to %q",
+					from.Name(), to),
+				r.errorf(prev.Pos(), "\twould conflict with this %s",
+					objectKind(prev)))
 			return // skip checkSelections to avoid redundant errors
 		}
 	} else {
@@ -338,9 +357,10 @@ func (r *Unexporter) checkStructField(objsToUpdate map[types.Object]string, from
 		T := info.Types[tStruct].Type.Underlying().(*types.Struct)
 		for i := 0; i < T.NumFields(); i++ {
 			if prev := T.Field(i); prev.Name() == to {
-				r.errorf(from.Pos(), "renaming this field %q to %q",
-					from.Name(), to)
-				r.errorf(prev.Pos(), "\twould conflict with this field")
+				r.warn(from,
+					r.errorf(from.Pos(), "renaming this field %q to %q",
+						from.Name(), to),
+					r.errorf(prev.Pos(), "\twould conflict with this field"))
 				return // skip checkSelections to avoid redundant errors
 			}
 		}
@@ -426,26 +446,29 @@ func (r *Unexporter) checkSelections(objsToUpdate map[types.Object]string, from 
 }
 
 func (r *Unexporter) selectionConflict(objsToUpdate map[types.Object]string, from types.Object, to string, delta int, syntax *ast.SelectorExpr, obj types.Object) {
-	r.errorf(from.Pos(), "renaming this %s %q to %q",
+	rename := r.errorf(from.Pos(), "renaming this %s %q to %q",
 		objectKind(from), from.Name(), to)
 
 	switch {
 	case delta < 0:
 		// analogous to sub-block conflict
-		r.errorf(syntax.Sel.Pos(),
-			"\twould change the referent of this selection")
-		r.errorf(obj.Pos(), "\tof this %s", objectKind(obj))
+		r.warn(from, rename,
+			r.errorf(syntax.Sel.Pos(),
+				"\twould change the referent of this selection"),
+			r.errorf(obj.Pos(), "\tof this %s", objectKind(obj)))
 	case delta == 0:
 		// analogous to same-block conflict
-		r.errorf(syntax.Sel.Pos(),
-			"\twould make this reference ambiguous")
-		r.errorf(obj.Pos(), "\twith this %s", objectKind(obj))
+		r.warn(from, rename,
+			r.errorf(syntax.Sel.Pos(),
+				"\twould make this reference ambiguous"),
+			r.errorf(obj.Pos(), "\twith this %s", objectKind(obj)))
 	case delta > 0:
 		// analogous to super-block conflict
-		r.errorf(syntax.Sel.Pos(),
-			"\twould shadow this selection")
-		r.errorf(obj.Pos(), "\tof the %s declared here",
-			objectKind(obj))
+		r.warn(from, rename,
+			r.errorf(syntax.Sel.Pos(),
+				"\twould shadow this selection"),
+			r.errorf(obj.Pos(), "\tof the %s declared here",
+				objectKind(obj)))
 	}
 }
 
@@ -461,7 +484,7 @@ func (r *Unexporter) selectionConflict(objsToUpdate map[types.Object]string, fro
 func (r *Unexporter) checkMethod(objsToUpdate map[types.Object]string, from *types.Func, to string) {
 	// e.g. error.Error
 	if from.Pkg() == nil {
-		r.errorf(from.Pos(), "you cannot rename built-in method %s", from)
+		r.warn(from, r.errorf(from.Pos(), "you cannot rename built-in method %s", from))
 		return
 	}
 
@@ -480,9 +503,10 @@ func (r *Unexporter) checkMethod(objsToUpdate map[types.Object]string, from *typ
 		// declaration
 		prev, _, _ := types.LookupFieldOrMethod(R, false, from.Pkg(), to)
 		if prev != nil {
-			r.errorf(from.Pos(), "renaming this interface method %q to %q",
-				from.Name(), to)
-			r.errorf(prev.Pos(), "\twould conflict with this method")
+			r.warn(from,
+				r.errorf(from.Pos(), "renaming this interface method %q to %q",
+					from.Name(), to),
+				r.errorf(prev.Pos(), "\twould conflict with this method"))
 			return
 		}
 
@@ -502,10 +526,11 @@ func (r *Unexporter) checkMethod(objsToUpdate map[types.Object]string, from *typ
 					if t == nil {
 						continue
 					}
-					r.errorf(from.Pos(), "renaming this interface method %q to %q",
-						from.Name(), to)
-					r.errorf(t.Pos(), "\twould conflict with this method")
-					r.errorf(obj.Pos(), "\tin named interface type %q", obj.Name())
+					r.warn(from,
+						r.errorf(from.Pos(), "renaming this interface method %q to %q",
+							from.Name(), to),
+						r.errorf(t.Pos(), "\twould conflict with this method"),
+						r.errorf(obj.Pos(), "\tin named interface type %q", obj.Name()))
 				}
 			}
 
@@ -577,22 +602,24 @@ func (r *Unexporter) checkMethod(objsToUpdate map[types.Object]string, from *typ
 					// TODO(adonovan): record the constraint's position.
 					keyPos := token.NoPos
 
-					r.errorf(from.Pos(), "renaming this method %q to %q",
+					rename := r.errorf(from.Pos(), "renaming this method %q to %q",
 						from.Name(), to)
 					if delta == 0 {
 						// analogous to same-block conflict
-						r.errorf(keyPos, "\twould make the %s method of %s invoked via interface %s ambiguous",
-							to, key.RHS, key.LHS)
-						r.errorf(rto.Pos(), "\twith (%s).%s",
-							recv(rto).Type(), to)
+						r.warn(from, rename,
+							r.errorf(keyPos, "\twould make the %s method of %s invoked via interface %s ambiguous",
+								to, key.RHS, key.LHS),
+							r.errorf(rto.Pos(), "\twith (%s).%s",
+								recv(rto).Type(), to))
 					} else {
 						// analogous to super-block conflict
-						r.errorf(keyPos, "\twould change the %s method of %s invoked via interface %s",
-							to, key.RHS, key.LHS)
-						r.errorf(coupled.Pos(), "\tfrom (%s).%s",
-							recv(coupled).Type(), to)
-						r.errorf(rto.Pos(), "\tto (%s).%s",
-							recv(rto).Type(), to)
+						r.warn(from, rename,
+							r.errorf(keyPos, "\twould change the %s method of %s invoked via interface %s",
+								to, key.RHS, key.LHS),
+							r.errorf(coupled.Pos(), "\tfrom (%s).%s",
+								recv(coupled).Type(), to),
+							r.errorf(rto.Pos(), "\tto (%s).%s",
+								recv(rto).Type(), to))
 					}
 					return // one error is enough
 				}
@@ -600,9 +627,10 @@ func (r *Unexporter) checkMethod(objsToUpdate map[types.Object]string, from *typ
 
 			if !r.changeMethods {
 				// This should be unreachable.
-				r.errorf(from.Pos(), "internal error: during renaming of abstract method %s", from)
-				r.errorf(coupled.Pos(), "\tchangedMethods=false, coupled method=%s", coupled)
-				r.errorf(from.Pos(), "\tPlease file a bug report")
+				r.warn(from,
+					r.errorf(from.Pos(), "internal error: during renaming of abstract method %s", from),
+					r.errorf(coupled.Pos(), "\tchangedMethods=false, coupled method=%s", coupled),
+					r.errorf(from.Pos(), "\tPlease file a bug report"))
 				return
 			}
 
@@ -615,10 +643,11 @@ func (r *Unexporter) checkMethod(objsToUpdate map[types.Object]string, from *typ
 		// declaration
 		prev, indices, _ := types.LookupFieldOrMethod(R, true, from.Pkg(), to)
 		if prev != nil && len(indices) == 1 {
-			r.errorf(from.Pos(), "renaming this method %q to %q",
-				from.Name(), to)
-			r.errorf(prev.Pos(), "\twould conflict with this %s",
-				objectKind(prev))
+			r.warn(from,
+				r.errorf(from.Pos(), "renaming this method %q to %q",
+					from.Name(), to),
+				r.errorf(prev.Pos(), "\twould conflict with this %s",
+					objectKind(prev)))
 			return
 		}
 
@@ -654,7 +683,7 @@ func (r *Unexporter) checkMethod(objsToUpdate map[types.Object]string, from *typ
 			// imeth is the abstract method (e.g. I.f)
 			// and key.RHS is the concrete coupling type (e.g. D).
 			if !r.changeMethods {
-				r.errorf(from.Pos(), "renaming this method %q to %q",
+				rename := r.errorf(from.Pos(), "renaming this method %q to %q",
 					from.Name(), to)
 				var pos token.Pos
 				var iface string
@@ -667,10 +696,11 @@ func (r *Unexporter) checkMethod(objsToUpdate map[types.Object]string, from *typ
 					pos = from.Pos()
 					iface = I.String()
 				}
-				r.errorf(pos, "\twould make %s no longer assignable to %s",
-					key.RHS, iface)
-				r.errorf(imeth.Pos(), "\t(rename %s.%s if you intend to change both types)",
-					I, from.Name())
+				r.warn(from, rename,
+					r.errorf(pos, "\twould make %s no longer assignable to %s",
+						key.RHS, iface),
+					r.errorf(imeth.Pos(), "\t(rename %s.%s if you intend to change both types)",
+						I, from.Name()))
 				return // one error is enough
 			}
 
@@ -684,16 +714,18 @@ func (r *Unexporter) checkMethod(objsToUpdate map[types.Object]string, from *typ
 	r.checkSelections(objsToUpdate, from, to)
 }
 
+// XXX this is always true for the use case of this libary
 func (r *Unexporter) checkExport(id *ast.Ident, pkg *types.Package, from types.Object, to string) bool {
 	// Reject cross-package references if to is unexported.
 	// (Such references may be qualified identifiers or field/method
 	// selections.)
 	if !ast.IsExported(to) && pkg != from.Pkg() {
-		r.errorf(from.Pos(),
-			"renaming this %s %q to %q would make it unexported",
-			objectKind(from), from.Name(), to)
-		r.errorf(id.Pos(), "\tbreaking references from packages such as %q",
-			pkg.Path())
+		r.warn(from,
+			r.errorf(from.Pos(),
+				"renaming this %s %q to %q would make it unexported",
+				objectKind(from), from.Name(), to),
+			r.errorf(id.Pos(), "\tbreaking references from packages such as %q",
+				pkg.Path()))
 		return false
 	}
 	return true
@@ -775,6 +807,9 @@ func objectKind(obj types.Object) string {
 }
 
 // errorf reports an error (e.g. conflict) and prevents file modification.
-func (r *Unexporter) errorf(pos token.Pos, format string, args ...interface{}) {
-	r.warnings <- fmt.Sprintf("%s: %s", r.iprog.Fset.Position(pos), fmt.Sprintf(format, args...))
+func (r *Unexporter) errorf(pos token.Pos, format string, args ...interface{}) string {
+	return fmt.Sprintf("%s: %s", r.iprog.Fset.Position(pos), fmt.Sprintf(format, args...))
+}
+func (r *Unexporter) warn(from types.Object, warnings ...string) {
+	r.warnings <- map[types.Object]string{from: strings.Join(warnings, "\n")}
 }

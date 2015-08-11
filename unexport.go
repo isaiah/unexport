@@ -20,18 +20,23 @@ var (
 
 func (u *Unexporter) unusedObjects() []types.Object {
 	used := u.usedObjects()
-	objs := make(map[string][]types.Object)
+	var objs []types.Object
 	for _, pkgInfo := range u.packages {
+		if pkgInfo.Pkg.Path() != u.path {
+			continue
+		}
 		for id, obj := range pkgInfo.Defs {
 			if used[obj] {
 				continue
 			}
 			if id.IsExported() {
-				objs[pkgInfo.Pkg.Path()] = append(objs[pkgInfo.Pkg.Path()], obj)
+				objs = append(objs, obj)
 			}
 		}
+		// No need to go further if path found
+		break
 	}
-	return objs[u.path]
+	return objs
 }
 
 func (u *Unexporter) usedObjects() map[types.Object]bool {
@@ -139,8 +144,8 @@ func New(ctx *build.Context, path string) (*Unexporter, error) {
 		iprog:        prog,
 		objsToUpdate: make(map[types.Object]map[types.Object]string),
 		packages:     make(map[*types.Package]*loader.PackageInfo),
-		warnings:     make(chan string),
-		Identifiers:  make(map[types.Object]string),
+		warnings:     make(chan map[types.Object]string),
+		Identifiers:  make(map[types.Object]*ObjectInfo),
 	}
 
 	for _, info := range prog.Imported {
@@ -161,9 +166,10 @@ func New(ctx *build.Context, path string) (*Unexporter, error) {
 			objs <- map[types.Object]map[types.Object]string{obj: objsToUpdate}
 		}(obj, toName)
 
-		u.Identifiers[obj] = wholePath(obj, u.path, u.iprog)
+		u.Identifiers[obj] = &ObjectInfo{Qualifier: wholePath(obj, u.path, u.iprog)}
 	}
-	// do it in another goroutine, or the write to u.warnings is blocked since it's a non-buffered channel
+	// do it in another goroutine, or the write to u.warnings
+	// is blocked since it's a non-buffered channel
 	go func() {
 		for i := 0; i < len(unusedObjs); i++ {
 			for obj, objsToUpdate := range <-objs {
@@ -173,8 +179,10 @@ func New(ctx *build.Context, path string) (*Unexporter, error) {
 		close(objs)
 		close(u.warnings)
 	}()
-	for warning := range u.warnings {
-		log.Println(warning)
+	for warnings := range u.warnings {
+		for obj, warning := range warnings {
+			u.Identifiers[obj].Warning = warning
+		}
 	}
 	return u, nil
 }
@@ -193,6 +201,10 @@ func (u *Unexporter) UpdateAll() error {
 	return u.update(objsToUpdate)
 }
 
+// This is copy & pasted from x/tools/refactor/rename
+// this is here becuase the collision checking are already done, and the context are
+// initialized, so that it doesn't have to go through the workspace to find all the relevant
+// packages, that's the most expensive operation
 // update renames the identifiers, updates the input files.
 func (u *Unexporter) update(objsToUpdate map[types.Object]string) error {
 	// We use token.File, not filename, since a file may appear to
