@@ -39,10 +39,10 @@ var _ foo.I = s(0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		u := &unexporter{
+		u := &Unexporter{
 			iprog:        prog,
 			packages:     make(map[*types.Package]*loader.PackageInfo),
-			objsToUpdate: make(map[types.Object]bool),
+			objsToUpdate: make(map[types.Object]map[types.Object]string),
 		}
 		for _, info := range prog.Imported {
 			u.packages[info.Pkg] = info
@@ -273,14 +273,15 @@ return y.F()
 		},
 	} {
 		// test body
-		cmds, err := Main(test.ctx, test.pkg)
+		unexporter, err := New(test.ctx, test.pkg)
 		if err != nil {
 			t.Fatal(err)
 		}
+		cmds := unexporter.Identifiers
 		if len(cmds) > 1 {
 			var concated string
 			for k, v := range cmds {
-				concated += formatCmd(map[string]string{k: v})
+				concated += formatCmd(map[string]string{v: k.Name()})
 			}
 			for k, v := range test.want {
 				want := map[string]string{k: v}
@@ -292,8 +293,14 @@ return y.F()
 			if len(test.want) > 0 {
 				if len(cmds) == 0 {
 					t.Errorf("expected %s, got none", formatCmd(test.want))
-				} else if formatCmd(cmds) != formatCmd(test.want) {
-					t.Errorf("expected %s, got %s", formatCmd(test.want), formatCmd(cmds))
+				} else {
+					arg := make(map[string]string)
+					for obj, qualifier := range cmds {
+						arg[qualifier] = obj.Name()
+					}
+					if formatCmd(arg) != formatCmd(test.want) {
+						t.Errorf("expected %s, got %s", formatCmd(test.want), formatCmd(arg))
+					}
 				}
 			} else {
 				if len(cmds) > 0 {
@@ -327,8 +334,8 @@ func main(content string) *build.Context {
 }
 
 func formatCmd(pair map[string]string) string {
-	for k, v := range pair {
-		return fmt.Sprintf("gorename -from %s -to %s\n", k, v)
+	for k, _ := range pair {
+		return k
 	}
 	return ""
 }

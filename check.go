@@ -16,23 +16,23 @@ import (
 // Content of this file is copy & pasted from x/tools/refactor/rename,
 // Because the check method nor the rename.reportError method are exported
 
-type unexporter struct {
+type Unexporter struct {
+	path               string
 	changeMethods      bool
 	iprog              *loader.Program
-	objsToUpdate       map[types.Object]bool
+	objsToUpdate       map[types.Object]map[types.Object]string
 	packages           map[*types.Package]*loader.PackageInfo // subset of iprog.AllPackages to inspect
 	msets              typeutil.MethodSetCache
 	satisfyConstraints map[satisfy.Constraint]bool
 	warnings           chan string
+	Identifiers        map[types.Object]string
 }
 
-// XXX memories the packages, parallize the check
-
-func (r *unexporter) check(objsToUpdate map[types.Object]bool, from types.Object, to string) {
-	if objsToUpdate[from] {
+func (r *Unexporter) check(objsToUpdate map[types.Object]string, from types.Object, to string) {
+	if _, ok := objsToUpdate[from]; ok {
 		return
 	}
-	objsToUpdate[from] = true
+	objsToUpdate[from] = to
 
 	// NB: order of conditions is important.
 	if from_, ok := from.(*types.PkgName); ok {
@@ -55,7 +55,7 @@ func (r *unexporter) check(objsToUpdate map[types.Object]bool, from types.Object
 
 // checkInFileBlock performs safety checks for renames of objects in the file block,
 // i.e. imported package names.
-func (r *unexporter) checkInFileBlock(objsToUpdate map[types.Object]bool, from *types.PkgName, to string) {
+func (r *Unexporter) checkInFileBlock(objsToUpdate map[types.Object]string, from *types.PkgName, to string) {
 	// Check import name is not "init".
 	if to == "init" {
 		r.errorf(from.Pos(), "%q is not a valid imported package name", to)
@@ -89,7 +89,7 @@ func (r *unexporter) checkInFileBlock(objsToUpdate map[types.Object]bool, from *
 
 // checkInPackageBlock performs safety checks for renames of
 // func/var/const/type objects in the package block.
-func (r *unexporter) checkInPackageBlock(objsToUpdate map[types.Object]bool, from types.Object, to string) {
+func (r *Unexporter) checkInPackageBlock(objsToUpdate map[types.Object]string, from types.Object, to string) {
 	// Check that there are no references to the name from another
 	// package if the renaming would make it unexported.
 	if ast.IsExported(from.Name()) && !ast.IsExported(to) {
@@ -145,7 +145,7 @@ func (r *unexporter) checkInPackageBlock(objsToUpdate map[types.Object]bool, fro
 	}
 }
 
-func (r *unexporter) checkInLocalScope(objsToUpdate map[types.Object]bool, from types.Object, to string) {
+func (r *Unexporter) checkInLocalScope(objsToUpdate map[types.Object]string, from types.Object, to string) {
 	info := r.packages[from.Pkg()]
 
 	// Is this object an implicit local var for a type switch?
@@ -208,7 +208,7 @@ func (r *unexporter) checkInLocalScope(objsToUpdate map[types.Object]bool, from 
 // Removing the old name (and all references to it) is always safe, and
 // requires no checks.
 //
-func (r *unexporter) checkInLexicalScope(objsToUpdate map[types.Object]bool, from types.Object, to string, info *loader.PackageInfo) {
+func (r *Unexporter) checkInLexicalScope(objsToUpdate map[types.Object]string, from types.Object, to string, info *loader.PackageInfo) {
 	lexinfo := lexical.Structure(r.iprog.Fset, info.Pkg, &info.Info, info.Files)
 
 	b := lexinfo.Defs[from] // the block defining the 'from' object
@@ -278,7 +278,7 @@ func (r *unexporter) checkInLexicalScope(objsToUpdate map[types.Object]bool, fro
 	}
 }
 
-func (r *unexporter) checkLabel(label *types.Label, to string) {
+func (r *Unexporter) checkLabel(label *types.Label, to string) {
 	// Check there are no identical labels in the function's label block.
 	// (Label blocks don't nest, so this is easy.)
 	if prev := label.Parent().Lookup(to); prev != nil {
@@ -289,7 +289,7 @@ func (r *unexporter) checkLabel(label *types.Label, to string) {
 
 // checkStructField checks that the field renaming will not cause
 // conflicts at its declaration, or ambiguity or changes to any selection.
-func (r *unexporter) checkStructField(objsToUpdate map[types.Object]bool, from *types.Var, to string) {
+func (r *Unexporter) checkStructField(objsToUpdate map[types.Object]string, from *types.Var, to string) {
 	// Check that the struct declaration is free of field conflicts,
 	// and field/method conflicts.
 
@@ -364,7 +364,7 @@ func (r *unexporter) checkStructField(objsToUpdate map[types.Object]bool, from *
 
 // checkSelection checks that all uses and selections that resolve to
 // the specified object would continue to do so after the renaming.
-func (r *unexporter) checkSelections(objsToUpdate map[types.Object]bool, from types.Object, to string) {
+func (r *Unexporter) checkSelections(objsToUpdate map[types.Object]string, from types.Object, to string) {
 	for pkg, info := range r.packages {
 		if id := someUse(info, from); id != nil {
 			if !r.checkExport(id, pkg, from, to) {
@@ -425,7 +425,7 @@ func (r *unexporter) checkSelections(objsToUpdate map[types.Object]bool, from ty
 	}
 }
 
-func (r *unexporter) selectionConflict(objsToUpdate map[types.Object]bool, from types.Object, to string, delta int, syntax *ast.SelectorExpr, obj types.Object) {
+func (r *Unexporter) selectionConflict(objsToUpdate map[types.Object]string, from types.Object, to string, delta int, syntax *ast.SelectorExpr, obj types.Object) {
 	r.errorf(from.Pos(), "renaming this %s %q to %q",
 		objectKind(from), from.Name(), to)
 
@@ -458,7 +458,7 @@ func (r *unexporter) selectionConflict(objsToUpdate map[types.Object]bool, from 
 //   change the assignability relation.  For renamings of abstract
 //   methods, we rename all methods transitively coupled to it via
 //   assignability.
-func (r *unexporter) checkMethod(objsToUpdate map[types.Object]bool, from *types.Func, to string) {
+func (r *Unexporter) checkMethod(objsToUpdate map[types.Object]string, from *types.Func, to string) {
 	// e.g. error.Error
 	if from.Pkg() == nil {
 		r.errorf(from.Pos(), "you cannot rename built-in method %s", from)
@@ -684,7 +684,7 @@ func (r *unexporter) checkMethod(objsToUpdate map[types.Object]bool, from *types
 	r.checkSelections(objsToUpdate, from, to)
 }
 
-func (r *unexporter) checkExport(id *ast.Ident, pkg *types.Package, from types.Object, to string) bool {
+func (r *Unexporter) checkExport(id *ast.Ident, pkg *types.Package, from types.Object, to string) bool {
 	// Reject cross-package references if to is unexported.
 	// (Such references may be qualified identifiers or field/method
 	// selections.)
@@ -700,7 +700,7 @@ func (r *unexporter) checkExport(id *ast.Ident, pkg *types.Package, from types.O
 }
 
 // satisfy returns the set of interface satisfaction constraints.
-func (r *unexporter) satisfy() map[satisfy.Constraint]bool {
+func (r *Unexporter) satisfy() map[satisfy.Constraint]bool {
 	if r.satisfyConstraints == nil {
 		// Compute on demand: it's expensive.
 		var f satisfy.Finder
@@ -775,6 +775,6 @@ func objectKind(obj types.Object) string {
 }
 
 // errorf reports an error (e.g. conflict) and prevents file modification.
-func (r *unexporter) errorf(pos token.Pos, format string, args ...interface{}) {
+func (r *Unexporter) errorf(pos token.Pos, format string, args ...interface{}) {
 	r.warnings <- fmt.Sprintf("%s: %s", r.iprog.Fset.Position(pos), fmt.Sprintf(format, args...))
 }

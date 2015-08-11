@@ -1,15 +1,24 @@
 package unexport
 
 import (
+	"bytes"
+	"fmt"
 	"go/ast"
 	"go/build"
+	"go/format"
+	"go/token"
 	"golang.org/x/tools/go/loader"
 	"golang.org/x/tools/go/types"
 	"golang.org/x/tools/refactor/importgraph"
+	"io/ioutil"
 	"log"
 )
 
-func (u *unexporter) unusedObjects() map[string][]types.Object {
+var (
+	Verbose bool
+)
+
+func (u *Unexporter) unusedObjects() []types.Object {
 	used := u.usedObjects()
 	objs := make(map[string][]types.Object)
 	for _, pkgInfo := range u.packages {
@@ -22,10 +31,10 @@ func (u *unexporter) unusedObjects() map[string][]types.Object {
 			}
 		}
 	}
-	return objs
+	return objs[u.path]
 }
 
-func (u *unexporter) usedObjects() map[types.Object]bool {
+func (u *Unexporter) usedObjects() map[types.Object]bool {
 	objs := make(map[types.Object]bool)
 	for _, pkgInfo := range u.packages {
 		// easy path
@@ -117,19 +126,21 @@ func loadProgram(ctx *build.Context, pkgs []string) (*loader.Program, error) {
 	return conf.Load()
 }
 
-// Main The main entrance of the program, used by the CLI
-func Main(ctx *build.Context, path string) (identifiers map[string]string, err error) {
+// New creates a new Unexporter object that holds the states
+func New(ctx *build.Context, path string) (*Unexporter, error) {
 	pkgs := scanWorkspace(ctx, path)
 	prog, err := loadProgram(ctx, pkgs)
 
 	if err != nil {
-		return
+		return nil, err
 	}
-	u := &unexporter{
+	u := &Unexporter{
+		path:         path,
 		iprog:        prog,
-		objsToUpdate: make(map[types.Object]bool),
+		objsToUpdate: make(map[types.Object]map[types.Object]string),
 		packages:     make(map[*types.Package]*loader.PackageInfo),
 		warnings:     make(chan string),
+		Identifiers:  make(map[types.Object]string),
 	}
 
 	for _, info := range prog.Imported {
@@ -140,24 +151,23 @@ func Main(ctx *build.Context, path string) (identifiers map[string]string, err e
 		u.packages[info.Pkg] = info
 	}
 
-	identifiers = make(map[string]string)
-	objs := make(chan map[types.Object]bool)
-	unusedObjs := u.unusedObjects()[path]
+	objs := make(chan map[types.Object]map[types.Object]string)
+	unusedObjs := u.unusedObjects()
 	for _, obj := range unusedObjs {
 		toName := lowerFirst(obj.Name())
 		go func(obj types.Object, toName string) {
-			objsToUpdate := make(map[types.Object]bool)
+			objsToUpdate := make(map[types.Object]string)
 			u.check(objsToUpdate, obj, toName)
-			objs <- objsToUpdate
+			objs <- map[types.Object]map[types.Object]string{obj: objsToUpdate}
 		}(obj, toName)
 
-		identifiers[wholePath(obj, path, prog)] = toName
+		u.Identifiers[obj] = wholePath(obj, u.path, u.iprog)
 	}
 	// do it in another goroutine, or the write to u.warnings is blocked since it's a non-buffered channel
 	go func() {
 		for i := 0; i < len(unusedObjs); i++ {
-			for obj, t := range <-objs {
-				u.objsToUpdate[obj] = t
+			for obj, objsToUpdate := range <-objs {
+				u.objsToUpdate[obj] = objsToUpdate
 			}
 		}
 		close(objs)
@@ -166,7 +176,98 @@ func Main(ctx *build.Context, path string) (identifiers map[string]string, err e
 	for warning := range u.warnings {
 		log.Println(warning)
 	}
-	return
+	return u, nil
+}
+
+func (u *Unexporter) Update(obj types.Object) error {
+	return u.update(u.objsToUpdate[obj])
+}
+
+func (u *Unexporter) UpdateAll() error {
+	objsToUpdate := make(map[types.Object]string)
+	for _, objs := range u.objsToUpdate {
+		for obj, to := range objs {
+			objsToUpdate[obj] = to
+		}
+	}
+	return u.update(objsToUpdate)
+}
+
+// update renames the identifiers, updates the input files.
+func (u *Unexporter) update(objsToUpdate map[types.Object]string) error {
+	// We use token.File, not filename, since a file may appear to
+	// belong to multiple packages and be parsed more than once.
+	// token.File captures this distinction; filename does not.
+	var nidents int
+	var filesToUpdate = make(map[*token.File]bool)
+	for _, info := range u.packages {
+		// Mutate the ASTs and note the filenames.
+		for id, obj := range info.Defs {
+			if to, ok := objsToUpdate[obj]; ok {
+				nidents++
+				id.Name = to
+				filesToUpdate[u.iprog.Fset.File(id.Pos())] = true
+			}
+		}
+		for id, obj := range info.Uses {
+			if to, ok := objsToUpdate[obj]; ok {
+				nidents++
+				id.Name = to
+				filesToUpdate[u.iprog.Fset.File(id.Pos())] = true
+			}
+		}
+	}
+
+	// TODO(adonovan): don't rewrite cgo + generated files.
+	var nerrs, npkgs int
+	for _, info := range u.packages {
+		first := true
+		for _, f := range info.Files {
+			tokenFile := u.iprog.Fset.File(f.Pos())
+			if filesToUpdate[tokenFile] {
+				if first {
+					npkgs++
+					first = false
+					if Verbose {
+						log.Printf("Updating package %s\n",
+							info.Pkg.Path())
+					}
+				}
+				if err := rewriteFile(u.iprog.Fset, f, tokenFile.Name()); err != nil {
+					log.Printf("gorename: %s\n", err)
+					nerrs++
+				}
+			}
+		}
+	}
+	log.Printf("Renamed %d occurrence%s in %d file%s in %d package%s.\n",
+		nidents, plural(nidents),
+		len(filesToUpdate), plural(len(filesToUpdate)),
+		npkgs, plural(npkgs))
+	if nerrs > 0 {
+		return fmt.Errorf("failed to rewrite %d file%s", nerrs, plural(nerrs))
+	}
+	return nil
+}
+
+func plural(n int) string {
+	if n != 1 {
+		return "s"
+	}
+	return ""
+}
+
+var rewriteFile = func(fset *token.FileSet, f *ast.File, filename string) (err error) {
+	// TODO(adonovan): print packages and filenames in a form useful
+	// to editors (so they can reload files).
+	if Verbose {
+		log.Printf("\t%s\n", filename)
+	}
+	var buf bytes.Buffer
+	if err := format.Node(&buf, fset, f); err != nil {
+		return fmt.Errorf("failed to pretty-print syntax tree: %v", err)
+	}
+	return ioutil.WriteFile(filename, buf.Bytes(), 0644)
 }
 
 func scanWorkspace(ctxt *build.Context, path string) []string {
