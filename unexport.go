@@ -170,16 +170,28 @@ func New(ctx *build.Context, path string) (*Unexporter, error) {
 		u.packages[info.Pkg] = info
 	}
 
-	objs := make(chan map[types.Object]map[types.Object]string)
 	unusedObjs := u.unusedObjects()
-	for _, obj := range unusedObjs {
-		toName := lowerFirst(obj.Name())
-		go func(obj types.Object, toName string) {
-			objsToUpdate := make(map[types.Object]string)
-			u.check(objsToUpdate, obj, toName)
-			objs <- map[types.Object]map[types.Object]string{obj: objsToUpdate}
-		}(obj, toName)
-		u.Identifiers[obj] = &ObjectInfo{}
+	objs := make(chan map[types.Object]map[types.Object]string, 20)
+	input := make(chan types.Object, 20)
+	go func() {
+		for _, obj := range unusedObjs {
+			input <- obj
+			u.Identifiers[obj] = &ObjectInfo{}
+		}
+	}()
+	// spawn the workers
+	for i := 0; i < 10; i++ {
+		go func() {
+			for {
+				select {
+				case obj := <-input:
+					toName := lowerFirst(obj.Name())
+					objsToUpdate := make(map[types.Object]string)
+					u.check(objsToUpdate, obj, toName)
+					objs <- map[types.Object]map[types.Object]string{obj: objsToUpdate}
+				}
+			}
+		}()
 	}
 	for i := 0; i < len(unusedObjs); {
 		select {
