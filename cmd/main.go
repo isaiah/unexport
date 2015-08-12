@@ -21,7 +21,7 @@ var (
 	runall   = flag.Bool("all", false, "run all renaming")
 	dryrun   = flag.Bool("dryrun", false, "show the changes, but do not apply them")
 	verbose  = flag.Bool("v", false, "print extra verbose information, this will set gorename to verbose mode")
-	profile  = flag.Bool("profile", true, "write profile to file")
+	profile  = flag.Bool("profile", false, "memory profile")
 
 	errNotGoSourcePath = errors.New("path is not under GOROOT or GOPATH")
 )
@@ -43,7 +43,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	log.Println(*profile)
 	if *profile {
 		f, err := os.Create("unexport.mprof")
 		if err != nil {
@@ -60,12 +59,11 @@ func main() {
 
 	// apply the changes
 	for obj, info := range unexporter.Identifiers {
-
 		var s string
 		if info.Warning == "" {
 			fmt.Printf("unexport %s, y/n/r/c/A? ", unexporter.Qualifier(obj))
 		} else {
-			fmt.Printf("unexport %s causes conflicts\n%s, \nr/c/A? ", unexporter.Qualifier(obj), info.Warning)
+			fmt.Printf("unexport %s causes conflicts\n%s, \nn/r/c/A? ", unexporter.Qualifier(obj), info.Warning)
 		}
 		fmt.Scanf("%s", &s)
 		switch s {
