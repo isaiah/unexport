@@ -43,6 +43,19 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	if *dryrun {
+		fmt.Println(`Following identifiers are exported but not used anywhere out of the package:
+(The qualifiers are valid for gorename command)
+`)
+		for obj, info := range unexporter.Identifiers {
+			if info.Warning == "" {
+				fmt.Println(unexporter.Qualifier(obj))
+			} else {
+				fmt.Printf("unexport %s causes conflict:\n %s", unexporter.Qualifier(obj), info.Warning)
+			}
+		}
+		os.Exit(0)
+	}
 	if *profile {
 		f, err := os.Create("unexport.mprof")
 		if err != nil {
