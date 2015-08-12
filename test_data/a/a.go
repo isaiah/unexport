@@ -37,6 +37,8 @@ func (a *A) String() string {
 	return fmt.Sprintf("a is %d", a.X)
 }
 
-func (a *A) Count() int {
+func (a A) Count() int {
 	return a.X
 }
+
+var _ C = &A{0}

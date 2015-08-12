@@ -78,28 +78,30 @@ func (u *Unexporter) usedObjects() map[types.Object]bool {
 		if lhs, ok = key.LHS.(*types.Named); !ok {
 			continue
 		}
-		if rhs, ok = key.RHS.(*types.Named); !ok {
+		switch r := key.RHS.(type) {
+		case *types.Named:
+			rhs = r
+		case *types.Pointer: // the receiver could be a pointer, see #14
+			rhs = r.Elem().(*types.Named)
+		default:
 			continue
+		}
+
+		if lhs.Obj().Pkg() != rhs.Obj().Pkg() {
+			lset := u.msets.MethodSet(key.LHS)
+			for i := 0; i < lset.Len(); i++ {
+				obj := lset.At(i).Obj()
+				objs[obj] = true
+			}
 		}
 		// if satisfied by type within the same package only, it should not be exported
-		if lhs.Obj().Pkg() == rhs.Obj().Pkg() {
-			continue
-		}
-		// not interested if neither of the objects belong to the target package
-		//if lhs.Obj().Pkg().Path() != u.path && rhs.Obj().Pkg().Path() != u.path {
-		//	continue
-		//}
-		lset := u.msets.MethodSet(key.LHS)
-		for i := 0; i < lset.Len(); i++ {
-			obj := lset.At(i).Obj()
-			objs[obj] = true
-		}
+		// even though, we should not rename from the concret method side, but only from the
+		// interface side (see #14)
 		rset := u.msets.MethodSet(key.RHS)
 		for i := 0; i < rset.Len(); i++ {
 			obj := rset.At(i).Obj()
 			objs[obj] = true
 		}
-
 	}
 	return objs
 }
@@ -157,12 +159,13 @@ func New(ctx *build.Context, path string) (*Unexporter, error) {
 		return nil, err
 	}
 	u := &Unexporter{
-		path:        path,
-		iprog:       prog,
-		packages:    make(map[*types.Package]*loader.PackageInfo),
-		warnings:    make(chan map[types.Object]string),
-		Identifiers: make(map[types.Object]*ObjectInfo),
-		lexinfos:    make(map[*loader.PackageInfo]*lexical.Info),
+		path:          path,
+		iprog:         prog,
+		packages:      make(map[*types.Package]*loader.PackageInfo),
+		warnings:      make(chan map[types.Object]string),
+		Identifiers:   make(map[types.Object]*ObjectInfo),
+		lexinfos:      make(map[*loader.PackageInfo]*lexical.Info),
+		changeMethods: true, // always true for unexporter
 	}
 
 	for _, info := range prog.Imported {

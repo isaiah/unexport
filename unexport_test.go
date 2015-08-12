@@ -174,7 +174,7 @@ type I interface {
 			pkg:  "foo",
 			want: map[string]string{"\"foo\".I": "i"},
 		},
-		// interface satisfied only within package
+		// interface satisfied only within package, value receiver
 		{ctx: fakeContext(map[string][]string{
 			"foo": {`
 package foo
@@ -186,8 +186,29 @@ func (t) F() {}
 var _ i = t(0)
 `},
 		}),
-			pkg:  "foo",
-			want: map[string]string{"(\"foo\".t).F": "f", "(\"foo\".i).F": "f"},
+			pkg: "foo",
+			// should only rename the interface, the concret method
+			// will be renames are part of the satisfy relationship
+			want: map[string]string{"(\"foo\".i).F": "f"},
+		},
+		// interface satisfied only within package, pointer receiver
+		{ctx: fakeContext(map[string][]string{
+			"foo": {`
+package foo
+type i interface{
+F()
+}
+type t struct {
+x int
+}
+func (*t) F() {}
+var _ i = &t{0}
+`},
+		}),
+			pkg: "foo",
+			// should only rename the interface, the concret method
+			// will be renames are part of the satisfy relationship
+			want: map[string]string{"(\"foo\".i).F": "f"},
 		},
 		// interface satisfied by struct type
 		{ctx: fakeContext(map[string][]string{
@@ -279,6 +300,9 @@ return y.F()
 		}
 		cmds := unexporter.Identifiers
 		if len(cmds) > 1 {
+			if len(test.want) != len(cmds) {
+				t.Errorf("expected %d renaming, got %v", len(test.want), cmds)
+			}
 			var concated string
 			for k := range cmds {
 				concated += formatCmd(map[string]string{unexporter.Qualifier(k): k.Name()})

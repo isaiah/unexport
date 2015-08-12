@@ -68,7 +68,7 @@ func main() {
 			if info.Warning == "" {
 				fmt.Println(unexporter.Qualifier(obj))
 			} else {
-				fmt.Printf("unexport %s causes conflict:\n %s", unexporter.Qualifier(obj), info.Warning)
+				fmt.Printf("unexport %s causes conflict:\n %s\n", unexporter.Qualifier(obj), info.Warning)
 			}
 		}
 		os.Exit(0)
