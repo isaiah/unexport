@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/pprof"
+	t "runtime/trace"
 	"strings"
 )
 
@@ -22,6 +23,7 @@ var (
 	dryrun   = flag.Bool("dryrun", false, "show the changes, but do not apply them")
 	verbose  = flag.Bool("v", false, "print extra verbose information, this will set gorename to verbose mode")
 	profile  = flag.Bool("profile", false, "memory profile")
+	trace    = flag.Bool("trace", false, "trace goroutine execution")
 
 	errNotGoSourcePath = errors.New("path is not under GOROOT or GOPATH")
 )
@@ -39,9 +41,24 @@ func main() {
 	} else {
 		path = flag.Args()[0]
 	}
+	if *trace {
+		f, err := os.Create("unexport_trace.json")
+		if err != nil {
+			log.Fatal(err)
+		}
+		t.Start(f)
+		defer func() {
+			f.Close()
+			t.Stop()
+		}()
+	}
+
 	unexporter, err := unexport.New(ctxt, path)
 	if err != nil {
 		panic(err)
+	}
+	if *trace {
+		os.Exit(0)
 	}
 	if *dryrun {
 		fmt.Println(`Following identifiers are exported but not used anywhere out of the package:
