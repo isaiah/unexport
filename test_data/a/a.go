@@ -5,8 +5,10 @@ import (
 )
 
 var (
+	// UnusedVar should show in the result
 	UnusedVar = 1
-	UsedVar   = 2
+	// UsedVar is used by github.com/isaiah/unexport/test_data/b
+	UsedVar = 2
 )
 
 const (

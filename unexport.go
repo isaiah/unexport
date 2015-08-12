@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/build"
 	"go/format"
+	"go/parser"
 	"go/token"
 	"golang.org/x/tools/go/loader"
 	"golang.org/x/tools/go/types"
@@ -137,7 +138,9 @@ func getDeclareStructOrInterface(prog *loader.Program, v *types.Var) string {
 
 func loadProgram(ctx *build.Context, pkgs []string) (*loader.Program, error) {
 	conf := loader.Config{
-		Build: ctx,
+		Build:       ctx,
+		ParserMode:  parser.ParseComments,
+		AllowErrors: false,
 	}
 	for _, pkg := range pkgs {
 		conf.Import(pkg)
