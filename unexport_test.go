@@ -40,9 +40,9 @@ var _ foo.I = s(0)
 			t.Fatal(err)
 		}
 		u := &Unexporter{
-			iprog:        prog,
-			packages:     make(map[*types.Package]*loader.PackageInfo),
-			objsToUpdate: make(map[types.Object]map[types.Object]string),
+			iprog:       prog,
+			packages:    make(map[*types.Package]*loader.PackageInfo),
+			Identifiers: make(map[types.Object]*ObjectInfo),
 		}
 		for _, info := range prog.Imported {
 			u.packages[info.Pkg] = info
@@ -280,8 +280,8 @@ return y.F()
 		cmds := unexporter.Identifiers
 		if len(cmds) > 1 {
 			var concated string
-			for k, v := range cmds {
-				concated += formatCmd(map[string]string{v.Qualifier: k.Name()})
+			for k := range cmds {
+				concated += formatCmd(map[string]string{unexporter.Qualifier(k): k.Name()})
 			}
 			for k, v := range test.want {
 				want := map[string]string{k: v}
@@ -295,8 +295,8 @@ return y.F()
 					t.Errorf("expected %s, got none", formatCmd(test.want))
 				} else {
 					arg := make(map[string]string)
-					for obj, info := range cmds {
-						arg[info.Qualifier] = obj.Name()
+					for obj := range cmds {
+						arg[unexporter.Qualifier(obj)] = obj.Name()
 					}
 					if formatCmd(arg) != formatCmd(test.want) {
 						t.Errorf("expected %s, got %s", formatCmd(test.want), formatCmd(arg))

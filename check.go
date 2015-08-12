@@ -26,7 +26,6 @@ type Unexporter struct {
 	path               string
 	changeMethods      bool
 	iprog              *loader.Program
-	objsToUpdate       map[types.Object]map[types.Object]string
 	packages           map[*types.Package]*loader.PackageInfo // subset of iprog.AllPackages to inspect
 	msets              typeutil.MethodSetCache
 	satisfyConstraints map[satisfy.Constraint]bool
@@ -35,8 +34,8 @@ type Unexporter struct {
 }
 
 type ObjectInfo struct {
-	Qualifier string
-	Warning   string
+	Warning      string
+	objsToUpdate map[types.Object]string
 }
 
 func (r *Unexporter) check(objsToUpdate map[types.Object]string, from types.Object, to string) {

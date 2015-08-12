@@ -45,6 +45,10 @@ func (u *Unexporter) unusedObjects() []types.Object {
 func (u *Unexporter) usedObjects() map[types.Object]bool {
 	objs := make(map[types.Object]bool)
 	for _, pkgInfo := range u.packages {
+		// skip the target package
+		if pkgInfo.Pkg.Path() == u.path {
+			continue
+		}
 		// easy path
 		for id, obj := range pkgInfo.Uses {
 			// ignore builtin value
@@ -52,7 +56,9 @@ func (u *Unexporter) usedObjects() map[types.Object]bool {
 				continue
 			}
 			// if it's a type from different package, store it
+			// Only store objects from target package
 			if obj.Pkg() != pkgInfo.Pkg {
+				//obj.Pkg().Path() == u.path {
 				objs[obj] = true
 			}
 			// embedded field
@@ -77,6 +83,10 @@ func (u *Unexporter) usedObjects() map[types.Object]bool {
 		if lhs.Obj().Pkg() == rhs.Obj().Pkg() {
 			continue
 		}
+		// not interested if neither of the objects belong to the target package
+		//if lhs.Obj().Pkg().Path() != u.path && rhs.Obj().Pkg().Path() != u.path {
+		//	continue
+		//}
 		lset := u.msets.MethodSet(key.LHS)
 		for i := 0; i < lset.Len(); i++ {
 			obj := lset.At(i).Obj()
@@ -143,12 +153,11 @@ func New(ctx *build.Context, path string) (*Unexporter, error) {
 		return nil, err
 	}
 	u := &Unexporter{
-		path:         path,
-		iprog:        prog,
-		objsToUpdate: make(map[types.Object]map[types.Object]string),
-		packages:     make(map[*types.Package]*loader.PackageInfo),
-		warnings:     make(chan map[types.Object]string),
-		Identifiers:  make(map[types.Object]*ObjectInfo),
+		path:        path,
+		iprog:       prog,
+		packages:    make(map[*types.Package]*loader.PackageInfo),
+		warnings:    make(chan map[types.Object]string),
+		Identifiers: make(map[types.Object]*ObjectInfo),
 	}
 
 	for _, info := range prog.Imported {
@@ -168,36 +177,43 @@ func New(ctx *build.Context, path string) (*Unexporter, error) {
 			u.check(objsToUpdate, obj, toName)
 			objs <- map[types.Object]map[types.Object]string{obj: objsToUpdate}
 		}(obj, toName)
-
-		u.Identifiers[obj] = &ObjectInfo{Qualifier: wholePath(obj, u.path, u.iprog)}
+		u.Identifiers[obj] = &ObjectInfo{}
 	}
-	// do it in another goroutine, or the write to u.warnings
-	// is blocked since it's a non-buffered channel
-	go func() {
-		for i := 0; i < len(unusedObjs); i++ {
-			for obj, objsToUpdate := range <-objs {
-				u.objsToUpdate[obj] = objsToUpdate
+	for i := 0; i < len(unusedObjs); {
+		select {
+		case m := <-u.warnings:
+			for obj, warning := range m {
+				u.Identifiers[obj].Warning = warning
 			}
+		case m := <-objs:
+			for obj, objsToUpdate := range m {
+				u.Identifiers[obj].objsToUpdate = objsToUpdate
+			}
+			i++
 		}
-		close(objs)
-		close(u.warnings)
-	}()
-	for warnings := range u.warnings {
-		for obj, warning := range warnings {
-			u.Identifiers[obj].Warning = warning
+	}
+DONE:
+	for {
+		select {
+		case m := <-u.warnings:
+			for obj, warning := range m {
+				u.Identifiers[obj].Warning = warning
+			}
+		default:
+			break DONE
 		}
 	}
 	return u, nil
 }
 
 func (u *Unexporter) Update(obj types.Object) error {
-	return u.update(u.objsToUpdate[obj])
+	return u.update(u.Identifiers[obj].objsToUpdate)
 }
 
 func (u *Unexporter) UpdateAll() error {
 	objsToUpdate := make(map[types.Object]string)
-	for _, objs := range u.objsToUpdate {
-		for obj, to := range objs {
+	for _, objInfo := range u.Identifiers {
+		for obj, to := range objInfo.objsToUpdate {
 			objsToUpdate[obj] = to
 		}
 	}
@@ -209,13 +225,18 @@ func (u *Unexporter) Check(from types.Object, to string) string {
 	u.warnings = make(chan map[types.Object]string)
 	u.check(objsToUpdate, from, to)
 	close(u.warnings)
-	u.objsToUpdate[from] = objsToUpdate
+	u.Identifiers[from] = &ObjectInfo{objsToUpdate: objsToUpdate}
 	for ws := range u.warnings {
 		for _, warning := range ws {
+			u.Identifiers[from].Warning = warning
 			return warning
 		}
 	}
 	return ""
+}
+
+func (u *Unexporter) Qualifier(obj types.Object) string {
+	return wholePath(obj, u.path, u.iprog)
 }
 
 // This is copy & pasted from x/tools/refactor/rename

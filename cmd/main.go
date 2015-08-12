@@ -51,9 +51,9 @@ func main() {
 
 		var s string
 		if info.Warning == "" {
-			fmt.Printf("unexport %s, y/n/r/c/A? ", info.Qualifier)
+			fmt.Printf("unexport %s, y/n/r/c/A? ", unexporter.Qualifier(obj))
 		} else {
-			fmt.Printf("unexport %s causes conflicts\n%s, \nr/c/A? ", info.Qualifier, info.Warning)
+			fmt.Printf("unexport %s causes conflicts\n%s, \nr/c/A? ", unexporter.Qualifier(obj), info.Warning)
 		}
 		fmt.Scanf("%s", &s)
 		switch s {
@@ -78,7 +78,7 @@ func rename(unexporter *unexport.Unexporter, obj types.Object, info *unexport.Ob
 		unexporter.Update(obj)
 	} else {
 		fmt.Printf("rename %s to %s still causes conflicts\n%s,\nr/c/A? ",
-			info.Qualifier, warnings)
+			unexporter.Qualifier(obj), to, warnings)
 		// recursive
 		rename(unexporter, obj, info)
 	}
