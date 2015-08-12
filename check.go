@@ -11,6 +11,7 @@ import (
 	"golang.org/x/tools/refactor/satisfy"
 	"reflect"
 	"strings"
+	"sync"
 )
 
 // Content of this file is copy & pasted from x/tools/refactor/rename,
@@ -31,6 +32,9 @@ type Unexporter struct {
 	satisfyConstraints map[satisfy.Constraint]bool
 	warnings           chan map[types.Object]string
 	Identifiers        map[types.Object]*ObjectInfo
+	// memoization
+	lexinfos map[*loader.PackageInfo]*lexical.Info
+	mutex    sync.Mutex
 }
 
 type ObjectInfo struct {
@@ -116,7 +120,7 @@ func (r *Unexporter) checkInPackageBlock(objsToUpdate map[types.Object]string, f
 	}
 
 	info := r.packages[from.Pkg()]
-	lexinfo := lexical.Structure(r.iprog.Fset, from.Pkg(), &info.Info, info.Files)
+	lexinfo := r.lexInfo(info)
 
 	// Check that in the package block, "init" is a function, and never referenced.
 	if to == "init" {
@@ -222,7 +226,7 @@ func (r *Unexporter) checkInLocalScope(objsToUpdate map[types.Object]string, fro
 // requires no checks.
 //
 func (r *Unexporter) checkInLexicalScope(objsToUpdate map[types.Object]string, from types.Object, to string, info *loader.PackageInfo) {
-	lexinfo := lexical.Structure(r.iprog.Fset, info.Pkg, &info.Info, info.Files)
+	lexinfo := r.lexInfo(info)
 
 	b := lexinfo.Defs[from] // the block defining the 'from' object
 	if b != nil {
@@ -811,4 +815,16 @@ func (r *Unexporter) errorf(pos token.Pos, format string, args ...interface{}) s
 }
 func (r *Unexporter) warn(from types.Object, warnings ...string) {
 	r.warnings <- map[types.Object]string{from: strings.Join(warnings, "\n")}
+}
+
+func (r *Unexporter) lexInfo(info *loader.PackageInfo) *lexical.Info {
+	if lexinfo := r.lexinfos[info]; lexinfo != nil {
+		return lexinfo
+	} else {
+		lexinfo := lexical.Structure(r.iprog.Fset, info.Pkg, &info.Info, info.Files)
+		r.mutex.Lock()
+		r.lexinfos[info] = lexinfo
+		r.mutex.Unlock()
+		return lexinfo
+	}
 }

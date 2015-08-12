@@ -8,8 +8,10 @@ import (
 	"go/build"
 	"golang.org/x/tools/go/buildutil"
 	"golang.org/x/tools/go/types"
+	"log"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"strings"
 )
 
@@ -19,6 +21,7 @@ var (
 	runall   = flag.Bool("all", false, "run all renaming")
 	dryrun   = flag.Bool("dryrun", false, "show the changes, but do not apply them")
 	verbose  = flag.Bool("v", false, "print extra verbose information, this will set gorename to verbose mode")
+	profile  = flag.Bool("profile", true, "write profile to file")
 
 	errNotGoSourcePath = errors.New("path is not under GOROOT or GOPATH")
 )
@@ -40,7 +43,16 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
+	log.Println(*profile)
+	if *profile {
+		f, err := os.Create("unexport.mprof")
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.WriteHeapProfile(f)
+		f.Close()
+		os.Exit(0)
+	}
 	if *runall {
 		unexporter.UpdateAll()
 		os.Exit(0)
