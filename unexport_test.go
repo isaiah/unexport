@@ -263,6 +263,26 @@ var _ foo.I = t(0)
 		}),
 			pkg: "foo",
 		},
+		// non interface method should still be unexported #17
+		{ctx: fakeContext(map[string][]string{
+			"foo": {`
+package foo
+type I interface {
+F()
+}
+`},
+			"bar": {`
+package bar
+import "foo"
+type t int
+func (t) F() {}
+func (t) G() {}
+var _ foo.I = t(0)
+`},
+		}),
+			pkg:  "bar",
+			want: map[string]string{`("bar".t).G`: "g"},
+		},
 		// interface satisfied by interface
 		{ctx: fakeContext(map[string][]string{
 			"foo": {`

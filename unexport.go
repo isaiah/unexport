@@ -87,20 +87,19 @@ func (u *Unexporter) usedObjects() map[types.Object]bool {
 			continue
 		}
 
-		if lhs.Obj().Pkg() != rhs.Obj().Pkg() {
-			lset := u.msets.MethodSet(key.LHS)
-			for i := 0; i < lset.Len(); i++ {
-				obj := lset.At(i).Obj()
+		lset := u.msets.MethodSet(key.LHS)
+		rset := u.msets.MethodSet(key.RHS)
+		for i := 0; i < lset.Len(); i++ {
+			obj := lset.At(i).Obj()
+			// LHS are the abstract methods, they are only exported if there are other packages using it
+			if lhs.Obj().Pkg() != rhs.Obj().Pkg() {
 				objs[obj] = true
 			}
-		}
-		// if satisfied by type within the same package only, it should not be exported
-		// even though, we should not rename from the concret method side, but only from the
-		// interface side (see #14)
-		rset := u.msets.MethodSet(key.RHS)
-		for i := 0; i < rset.Len(); i++ {
-			obj := rset.At(i).Obj()
-			objs[obj] = true
+			// if satisfied by type within the same package only, it should be unexported
+			// however, we should not rename from the concret method side, but from the
+			// interface side, carefully exclude concret methods that don't implement an abstract method (see #14, #17)
+			rsel := rset.Lookup(rhs.Obj().Pkg(), obj.Name())
+			objs[rsel.Obj()] = true
 		}
 	}
 	return objs
