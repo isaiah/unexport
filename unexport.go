@@ -52,10 +52,6 @@ func (u *Unexporter) unusedObjects() []types.Object {
 func (u *Unexporter) usedObjects() map[types.Object]bool {
 	objs := make(map[types.Object]bool)
 	for _, pkgInfo := range u.packages {
-		// skip the target package
-		if pkgInfo.Pkg.Path() == u.path {
-			continue
-		}
 		// easy path
 		for id, obj := range pkgInfo.Uses {
 			// ignore builtin value
@@ -66,7 +62,8 @@ func (u *Unexporter) usedObjects() map[types.Object]bool {
 			if obj.Pkg() != pkgInfo.Pkg {
 				objs[obj] = true
 			}
-			// embedded field
+			// embedded fields are marked as used, no much which package the original type belongs to,
+			// so that they won't show up in the renaming list #16
 			if field := pkgInfo.Defs[id]; field != nil {
 				// embdded field identifier is the same as it's type
 				objs[field] = true
