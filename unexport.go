@@ -267,7 +267,7 @@ func (t typeObjects) Less(i, j int) bool {
 	// field or method should be placed at the end
 	_, field := t[i].(*types.Var)
 	_, meth := t[i].(*types.Func)
-	return !(field || meth)
+	return field || meth
 }
 
 func (u *Unexporter) UnusedObjectsSorted() []types.Object {

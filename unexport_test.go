@@ -384,7 +384,7 @@ X int
 }
 `),
 			pkg:  "main",
-			want: []string{"S", "X"},
+			want: []string{"X", "S"},
 		},
 		{
 			ctxt: main(`
@@ -394,7 +394,7 @@ F() int
 }
 `),
 			pkg:  "main",
-			want: []string{"I", "F"},
+			want: []string{"F", "I"},
 		},
 	} {
 		u, err := New(test.ctxt, test.pkg)
