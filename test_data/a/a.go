@@ -27,10 +27,15 @@ type D interface {
 
 type A struct {
 	X int
+	B
+}
+
+type B struct {
+	Y int
 }
 
 func NewA(i int) A {
-	return A{i}
+	return A{X: i}
 }
 
 func (a *A) String() string {
@@ -41,4 +46,4 @@ func (a A) Count() int {
 	return a.X
 }
 
-var _ C = &A{0}
+var _ C = &A{X: 0}

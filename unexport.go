@@ -14,6 +14,7 @@ import (
 	"golang.org/x/tools/refactor/lexical"
 	"io/ioutil"
 	"log"
+	"sort"
 )
 
 var (
@@ -24,6 +25,9 @@ var (
 )
 
 func (u *Unexporter) unusedObjects() []types.Object {
+	if len(u.unexportableObjects) != 0 {
+		return u.unexportableObjects
+	}
 	used := u.usedObjects()
 	var objs []types.Object
 	for _, pkgInfo := range u.packages {
@@ -41,6 +45,7 @@ func (u *Unexporter) unusedObjects() []types.Object {
 		// No need to go further if path found
 		break
 	}
+	u.unexportableObjects = objs
 	return objs
 }
 
@@ -58,9 +63,7 @@ func (u *Unexporter) usedObjects() map[types.Object]bool {
 				continue
 			}
 			// if it's a type from different package, store it
-			// Only store objects from target package
 			if obj.Pkg() != pkgInfo.Pkg {
-				//obj.Pkg().Path() == u.path {
 				objs[obj] = true
 			}
 			// embedded field
@@ -253,6 +256,24 @@ func (u *Unexporter) Check(from types.Object, to string) string {
 		}
 	}
 	return ""
+}
+
+// sort the objects, see #8
+type typeObjects []types.Object
+
+func (t typeObjects) Len() int      { return len(t) }
+func (t typeObjects) Swap(i, j int) { t[i], t[j] = t[j], t[i] }
+func (t typeObjects) Less(i, j int) bool {
+	// field or method should be placed at the end
+	_, field := t[i].(*types.Var)
+	_, meth := t[i].(*types.Func)
+	return !(field || meth)
+}
+
+func (u *Unexporter) UnusedObjectsSorted() []types.Object {
+	objs := u.unusedObjects()
+	sort.Sort(typeObjects(objs))
+	return objs
 }
 
 func (u *Unexporter) Qualifier(obj types.Object) string {

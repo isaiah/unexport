@@ -6,6 +6,7 @@ import (
 	"golang.org/x/tools/go/buildutil"
 	"golang.org/x/tools/go/loader"
 	"golang.org/x/tools/go/types"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -76,6 +77,40 @@ func TestUnusedIdentifiers(t *testing.T) {
 			pkg:  "main",
 			want: map[string]string{"\"main\".S": "s"},
 		},
+		// unused struct type, embeded #16
+		{ctx: main(`
+package main
+type S struct { t int }
+type x struct {
+S
+}
+`),
+			pkg:  "main",
+			want: map[string]string{"\"main\".S": "s"},
+		},
+		// unused interface type, embeded in struct type #16
+		{ctx: main(`
+package main
+type S interface { f()int }
+type x struct {
+S
+}
+`),
+			pkg:  "main",
+			want: map[string]string{"\"main\".S": "s"},
+		},
+		// unused interface type, embeded in interface type #16
+		{ctx: main(`
+package main
+type S interface { f()int }
+type x interface {
+S
+}
+`),
+			pkg:  "main",
+			want: map[string]string{"\"main\".S": "s"},
+		},
+
 		// unused type field
 		{ctx: main(`package main; type s struct { T int }`),
 			pkg:  "main",
@@ -331,6 +366,47 @@ return y.F()
 					t.Errorf("expected no renaming, got\n %v", cmds)
 				}
 			}
+		}
+	}
+}
+
+func TestUnusedObjectsSorted(t *testing.T) {
+	for _, test := range []struct {
+		ctxt *build.Context
+		pkg  string
+		want []string
+	}{
+		{
+			ctxt: main(`
+package main
+type S struct {
+X int
+}
+`),
+			pkg:  "main",
+			want: []string{"S", "X"},
+		},
+		{
+			ctxt: main(`
+package main
+type I interface {
+F() int
+}
+`),
+			pkg:  "main",
+			want: []string{"I", "F"},
+		},
+	} {
+		u, err := New(test.ctxt, test.pkg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, o := range u.UnusedObjectsSorted() {
+			got = append(got, o.Name())
+		}
+		if !reflect.DeepEqual(got, test.want) {
+			t.Errorf("expected %v, got %v", test.want, got)
 		}
 	}
 }

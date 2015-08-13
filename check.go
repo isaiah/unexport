@@ -33,8 +33,9 @@ type Unexporter struct {
 	warnings           chan map[types.Object]string
 	Identifiers        map[types.Object]*ObjectInfo
 	// memoization
-	lexinfos map[*loader.PackageInfo]*lexical.Info
-	mutex    sync.Mutex
+	unexportableObjects []types.Object
+	lexinfos            map[*loader.PackageInfo]*lexical.Info
+	mutex               sync.Mutex
 }
 
 type ObjectInfo struct {
