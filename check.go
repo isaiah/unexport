@@ -23,6 +23,9 @@ import (
 // Things I don't like:
 // fmt.Fprintf(os.Stderr, ....) is very ugly, export a `ReportError` interface is OK, but use the `log` package is probably better?
 
+// Maybe instead of expose the above mentioned functions from `x/tools/refactor/rename`, it could use the functions exposed by this package instead,
+// since it only uses a subset of the functionalities. e.g. it doesn't require thread-safty
+
 type Unexporter struct {
 	path               string
 	changeMethods      bool

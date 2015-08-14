@@ -70,6 +70,7 @@ func (u *Unexporter) usedObjects() map[types.Object]bool {
 			}
 		}
 	}
+	// Check assignability
 	for key := range u.satisfy() {
 		var (
 			lhs, rhs *types.Named

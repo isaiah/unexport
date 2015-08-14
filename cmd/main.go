@@ -64,11 +64,13 @@ func main() {
 		fmt.Println(`Following identifiers are exported but not used anywhere out of the package:
 (The qualifiers are valid for gorename command)
 `)
-		for obj, info := range unexporter.Identifiers {
+		for _, obj := range unexporter.UnusedObjectsSorted() {
+			info := unexporter.Identifiers[obj]
+
 			if info.Warning == "" {
 				fmt.Println(unexporter.Qualifier(obj))
 			} else {
-				fmt.Printf("unexport %s causes conflict:\n %s\n", unexporter.Qualifier(obj), info.Warning)
+				fmt.Printf("unexport %s causes conflict:\n%s\n", unexporter.Qualifier(obj), info.Warning)
 			}
 		}
 		os.Exit(0)
@@ -83,12 +85,24 @@ func main() {
 		os.Exit(0)
 	}
 	if *runall {
+		var conflict bool
+		for obj, info := range unexporter.Identifiers {
+			if info.Warning != "" {
+				fmt.Printf("unexport %s causes conflicts\n%s", unexporter.Qualifier(obj), info.Warning)
+				conflict = true
+			}
+		}
+		if conflict {
+			fmt.Println("Please fix the conflicts before continue.")
+			os.Exit(1)
+		}
 		unexporter.UpdateAll()
 		os.Exit(0)
 	}
 
 	// apply the changes
-	for obj, info := range unexporter.Identifiers {
+	for _, obj := range unexporter.UnusedObjectsSorted() {
+		info := unexporter.Identifiers[obj]
 		var s string
 		if info.Warning == "" {
 			fmt.Printf("unexport %s, y/n/r/c/A? ", unexporter.Qualifier(obj))
