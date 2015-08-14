@@ -17,16 +17,37 @@ import (
 )
 
 var (
-	safe     = flag.Bool("safe", false, "only look for internal packages")
 	helpFlag = flag.Bool("help", false, "show usage message")
-	runall   = flag.Bool("all", false, "run all renaming")
-	dryrun   = flag.Bool("dryrun", false, "show the changes, but do not apply them")
-	verbose  = flag.Bool("v", false, "print extra verbose information, this will set gorename to verbose mode")
+	runall   = flag.Bool("all", false, "run all renaming, aborts if there are unsolved conflicts")
+	dryrun   = flag.Bool("dryrun", false, "show the unused identifiers, but do not apply renaming")
 	profile  = flag.Bool("profile", false, "memory profile")
 	trace    = flag.Bool("trace", false, "trace goroutine execution")
 
 	errNotGoSourcePath = errors.New("path is not under GOROOT or GOPATH")
 )
+
+func init() {
+	flag.BoolVar(&unexport.Verbose, "v", false, "print extra verbose information")
+
+	flag.Usage = func() {
+		usage := `unexport: a tool that finds unnecessarily exported identifiers in a package and help unexport them
+
+By default it checks the current directory, if it's in the GOPATH, otherwise you can specify the
+targeting package as argument
+
+It prompt the unexport of each identifier, you can choose to unexport, skip or apply an alternative name.
+by default the resulting name is the original name with its first letter downcased.
+
+Usage:
+
+  unexport <flags> [package]
+
+Flags:
+`
+		fmt.Fprintf(os.Stderr, "%s", usage)
+		flag.PrintDefaults()
+	}
+}
 
 func main() {
 	flag.Parse()
@@ -101,13 +122,14 @@ func main() {
 	}
 
 	// apply the changes
+	fmt.Println("Please press corresponding key to proceed, y to confirm, n to skip, r to use a different name and c to cancel:")
 	for _, obj := range unexporter.UnusedObjectsSorted() {
 		info := unexporter.Identifiers[obj]
 		var s string
 		if info.Warning == "" {
-			fmt.Printf("unexport %s, y/n/r/c/A? ", unexporter.Qualifier(obj))
+			fmt.Printf("unexport %s, y/n/r/c? ", unexporter.Qualifier(obj))
 		} else {
-			fmt.Printf("unexport %s causes conflicts\n%s, \nn/r/c/A? ", unexporter.Qualifier(obj), info.Warning)
+			fmt.Printf("unexport %s causes conflicts\n%s, \nn/r/c? ", unexporter.Qualifier(obj), info.Warning)
 		}
 		fmt.Scanf("%s", &s)
 		switch s {
