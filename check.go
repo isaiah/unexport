@@ -361,9 +361,9 @@ func (r *Unexporter) checkStructField(objsToUpdate map[types.Object]string, from
 	} else {
 		// This struct is not a named type.
 		// We need only check for direct (non-promoted) field/field conflicts.
-		T := info.Types[tStruct].Type.Underlying().(*types.Struct)
-		for i := 0; i < T.NumFields(); i++ {
-			if prev := T.Field(i); prev.Name() == to {
+		t := info.Types[tStruct].Type.Underlying().(*types.Struct)
+		for i := 0; i < t.NumFields(); i++ {
+			if prev := t.Field(i); prev.Name() == to {
 				r.warn(from,
 					r.errorf(from.Pos(), "renaming this field %q to %q",
 						from.Name(), to),
@@ -695,19 +695,19 @@ func (r *Unexporter) checkMethod(objsToUpdate map[types.Object]string, from *typ
 				var pos token.Pos
 				var iface string
 
-				I := recv(imeth).Type()
-				if named, ok := I.(*types.Named); ok {
+				i := recv(imeth).Type()
+				if named, ok := i.(*types.Named); ok {
 					pos = named.Obj().Pos()
 					iface = "interface " + named.Obj().Name()
 				} else {
 					pos = from.Pos()
-					iface = I.String()
+					iface = i.String()
 				}
 				r.warn(from, rename,
 					r.errorf(pos, "\twould make %s no longer assignable to %s",
 						key.RHS, iface),
 					r.errorf(imeth.Pos(), "\t(rename %s.%s if you intend to change both types)",
-						I, from.Name()))
+						i, from.Name()))
 				return // one error is enough
 			}
 
@@ -770,7 +770,7 @@ func someUse(info *loader.PackageInfo, obj types.Object) *ast.Ident {
 
 // -- Plundered from golang.org/x/tools/go/ssa -----------------
 
-func isInterface(T types.Type) bool { return types.IsInterface(T) }
+func isInterface(t types.Type) bool { return types.IsInterface(t) }
 
 func deref(typ types.Type) types.Type {
 	if p, _ := typ.(*types.Pointer); p != nil {

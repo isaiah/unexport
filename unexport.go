@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	Verbose bool
+	verbose bool
 	Usage   = `
 	The unexport command first display the overall information, and highten the potential naming conflicts as a result of the renaming, then it prompt the interactive command line to allow confirm each renaming items. It also offers opportunity to change the resulting name, by default it only downcase the first letter of the original name.
 	`
@@ -320,7 +320,7 @@ func (u *Unexporter) update(objsToUpdate map[types.Object]string) error {
 				if first {
 					npkgs++
 					first = false
-					if Verbose {
+					if verbose {
 						log.Printf("Updating package %s\n",
 							info.Pkg.Path())
 					}
@@ -352,7 +352,7 @@ func plural(n int) string {
 var rewriteFile = func(fset *token.FileSet, f *ast.File, filename string) (err error) {
 	// TODO(adonovan): print packages and filenames in a form useful
 	// to editors (so they can reload files).
-	if Verbose {
+	if verbose {
 		log.Printf("\t%s\n", filename)
 	}
 	var buf bytes.Buffer
