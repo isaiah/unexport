@@ -819,13 +819,13 @@ func (r *Unexporter) warn(from types.Object, warnings ...string) {
 }
 
 func (r *Unexporter) lexInfo(info *loader.PackageInfo) *lexical.Info {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 	if lexinfo := r.lexinfos[info]; lexinfo != nil {
 		return lexinfo
 	} else {
 		lexinfo := lexical.Structure(r.iprog.Fset, info.Pkg, &info.Info, info.Files)
-		r.mutex.Lock()
 		r.lexinfos[info] = lexinfo
-		r.mutex.Unlock()
 		return lexinfo
 	}
 }

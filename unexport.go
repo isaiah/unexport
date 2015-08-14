@@ -178,10 +178,12 @@ func New(ctx *build.Context, path string) (*Unexporter, error) {
 	unusedObjs := u.unusedObjects()
 	objs := make(chan map[types.Object]map[types.Object]string, 20)
 	input := make(chan types.Object, 20)
+	for _, obj := range unusedObjs {
+		u.Identifiers[obj] = &ObjectInfo{}
+	}
 	go func() {
 		for _, obj := range unusedObjs {
 			input <- obj
-			u.Identifiers[obj] = &ObjectInfo{}
 		}
 	}()
 	// spawn the workers
@@ -202,7 +204,9 @@ func New(ctx *build.Context, path string) (*Unexporter, error) {
 		select {
 		case m := <-u.warnings:
 			for obj, warning := range m {
-				u.Identifiers[obj].Warning = warning
+				if u.Identifiers[obj] != nil {
+					u.Identifiers[obj].Warning = warning
+				}
 			}
 		case m := <-objs:
 			for obj, objsToUpdate := range m {
