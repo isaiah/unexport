@@ -102,7 +102,7 @@ func main() {
 			log.Fatal(err)
 		}
 		pprof.WriteHeapProfile(f)
-		f.Close()
+		defer f.Close()
 		os.Exit(0)
 	}
 	if *runall {

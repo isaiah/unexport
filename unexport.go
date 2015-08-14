@@ -227,10 +227,12 @@ DONE:
 	return u, nil
 }
 
+// Update unexport the specified identifier
 func (u *Unexporter) Update(obj types.Object) error {
 	return u.update(u.Identifiers[obj].objsToUpdate)
 }
 
+// UpdateAll apply all renaming, conflicts are ignored
 func (u *Unexporter) UpdateAll() error {
 	objsToUpdate := make(map[types.Object]string)
 	for _, objInfo := range u.Identifiers {
@@ -241,9 +243,9 @@ func (u *Unexporter) UpdateAll() error {
 	return u.update(objsToUpdate)
 }
 
+// Check checks if any possible renaming conflict and return the conflict information
 func (u *Unexporter) Check(from types.Object, to string) string {
 	objsToUpdate := make(map[types.Object]string)
-	u.warnings = make(chan map[types.Object]string)
 	u.check(objsToUpdate, from, to)
 	close(u.warnings)
 	u.Identifiers[from] = &ObjectInfo{objsToUpdate: objsToUpdate}
@@ -268,20 +270,21 @@ func (t typeObjects) Less(i, j int) bool {
 	return field || meth
 }
 
+// UnusedObjectsSorted place the unused field and method before everything else, so that
+// they are renamed before the other, this is necessary as otherwise the we need to re-generate
+// the qualifier of field and method if the type it belongs to has changed
 func (u *Unexporter) UnusedObjectsSorted() []types.Object {
 	objs := u.unusedObjects()
 	sort.Sort(typeObjects(objs))
 	return objs
 }
 
+// Qualifier the full qualifier for specified object, ready for consumption of `gorename` command
 func (u *Unexporter) Qualifier(obj types.Object) string {
 	return wholePath(obj, u.path, u.iprog)
 }
 
 // This is copy & pasted from x/tools/refactor/rename
-// this is here becuase the collision checking are already done, and the context are
-// initialized, so that it doesn't have to go through the workspace to find all the relevant
-// packages, that's the most expensive operation
 // update renames the identifiers, updates the input files.
 func (u *Unexporter) update(objsToUpdate map[types.Object]string) error {
 	// We use token.File, not filename, since a file may appear to
