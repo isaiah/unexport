@@ -34,7 +34,7 @@ How does it work
 
 First it will analyze usage of each idenfiers of the current package in the
 whole scope of workspace (GOPATH & GOROOT), and then use `gorename` to check
-conflicts and apply the changes. For performance reasons, the code as adopted
+conflicts and apply the changes. For performance reasons, (thread safty & caching) the code is adopted
 from `x/tools/refactor/rename`.
 
 Credits
