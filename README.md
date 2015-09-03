@@ -7,7 +7,8 @@ Install
 ------------
 
 ```shell
-go get github.com/isaiah/unexport
+# for go1.5 users
+GO15VENDOREXPERIMENT=1 go get -u github.com/isaiah/unexport
 ```
 
 Usage
