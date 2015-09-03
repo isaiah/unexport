@@ -7,7 +7,7 @@ Install
 ------------
 
 ```shell
-go install github.com/isaiah/unexport
+go get github.com/isaiah/unexport
 ```
 
 Usage
