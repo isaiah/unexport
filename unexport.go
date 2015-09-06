@@ -3,6 +3,7 @@ package unexport
 import (
 	"bytes"
 	"fmt"
+	"github.com/isaiah/unexport/lexical"
 	"go/ast"
 	"go/build"
 	"go/format"
@@ -11,7 +12,6 @@ import (
 	"golang.org/x/tools/go/loader"
 	"golang.org/x/tools/go/types"
 	"golang.org/x/tools/refactor/importgraph"
-	"golang.org/x/tools/refactor/lexical"
 	"io/ioutil"
 	"log"
 	"sort"

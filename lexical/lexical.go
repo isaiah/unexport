@@ -7,9 +7,10 @@
 // precise understanding of identifier resolution than is available from
 // the output of the type-checker alone.
 //
-// THIS INTERFACE IS EXPERIMENTAL AND MAY CHANGE OR BE REMOVED IN FUTURE.
+// THIS IS COPIED FROM "golang.org/x/tools/refactor/lexical",
+// THE ORIGINAL PACKAGE IS REMOVED
 //
-package lexical // import "golang.org/x/tools/refactor/lexical"
+package lexical
 
 // OVERVIEW
 //

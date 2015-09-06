@@ -3,12 +3,16 @@ gounexport
 
 Find unnecessarily exported identifiers in a package and help unexport them.
 
+Requirement
+-----------
+
+Develope and tested on Go 1.5
+
 Install
 ------------
 
 ```shell
-# for go1.5 users
-GO15VENDOREXPERIMENT=1 go get -u github.com/isaiah/unexport
+go get -u github.com/isaiah/unexport
 ```
 
 Usage
