@@ -11,7 +11,6 @@ import (
 	"golang.org/x/tools/go/loader"
 	"golang.org/x/tools/go/types"
 	"golang.org/x/tools/refactor/importgraph"
-	"golang.org/x/tools/refactor/lexical"
 	"io/ioutil"
 	"log"
 	"sort"
@@ -161,7 +160,6 @@ func New(ctx *build.Context, path string) (*Unexporter, error) {
 		packages:      make(map[*types.Package]*loader.PackageInfo),
 		warnings:      make(chan map[types.Object]string),
 		Identifiers:   make(map[types.Object]*ObjectInfo),
-		lexinfos:      make(map[*loader.PackageInfo]*lexical.Info),
 		changeMethods: true, // always true for unexporter
 	}
 
