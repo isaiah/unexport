@@ -6,7 +6,7 @@ Find unnecessarily exported identifiers in a package and help unexport them.
 Requirement
 -----------
 
-Develope and tested on Go 1.5
+Test and developed on Go 1.5
 
 Install
 ------------
