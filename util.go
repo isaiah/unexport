@@ -2,10 +2,11 @@ package unexport
 
 import (
 	"fmt"
-	"golang.org/x/tools/go/loader"
-	"golang.org/x/tools/go/types"
+	"go/types"
 	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/tools/go/loader"
 )
 
 func wholePath(obj types.Object, path string, prog *loader.Program) string {

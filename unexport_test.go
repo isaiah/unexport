@@ -3,12 +3,13 @@ package unexport
 import (
 	"fmt"
 	"go/build"
-	"golang.org/x/tools/go/buildutil"
-	"golang.org/x/tools/go/loader"
-	"golang.org/x/tools/go/types"
+	"go/types"
 	"reflect"
 	"strings"
 	"testing"
+
+	"golang.org/x/tools/go/buildutil"
+	"golang.org/x/tools/go/loader"
 )
 
 func TestUsedIdentifiers(t *testing.T) {

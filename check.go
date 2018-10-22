@@ -2,16 +2,17 @@ package unexport
 
 import (
 	"fmt"
-	"github.com/isaiah/unexport/lexical"
 	"go/ast"
 	"go/token"
-	"golang.org/x/tools/go/loader"
-	"golang.org/x/tools/go/types"
-	"golang.org/x/tools/go/types/typeutil"
-	"golang.org/x/tools/refactor/satisfy"
+	"go/types"
 	"reflect"
 	"strings"
 	"sync"
+
+	"github.com/isaiah/unexport/lexical"
+	"golang.org/x/tools/go/loader"
+	"golang.org/x/tools/go/types/typeutil"
+	"golang.org/x/tools/refactor/satisfy"
 )
 
 // Content of this file is copy & pasted from x/tools/refactor/rename,
