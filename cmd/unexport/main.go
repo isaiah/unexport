@@ -4,16 +4,17 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/isaiah/unexport"
 	"go/build"
-	"golang.org/x/tools/go/buildutil"
-	"golang.org/x/tools/go/types"
+	"go/types"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime/pprof"
 	t "runtime/trace"
 	"strings"
+
+	"github.com/isaiah/unexport"
+	"golang.org/x/tools/go/buildutil"
 )
 
 var (

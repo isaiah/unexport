@@ -3,18 +3,19 @@ package unexport
 import (
 	"bytes"
 	"fmt"
-	"github.com/isaiah/unexport/lexical"
 	"go/ast"
 	"go/build"
 	"go/format"
 	"go/parser"
 	"go/token"
-	"golang.org/x/tools/go/loader"
-	"golang.org/x/tools/go/types"
-	"golang.org/x/tools/refactor/importgraph"
+	"go/types"
 	"io/ioutil"
 	"log"
 	"sort"
+
+	"github.com/isaiah/unexport/lexical"
+	"golang.org/x/tools/go/loader"
+	"golang.org/x/tools/refactor/importgraph"
 )
 
 var (

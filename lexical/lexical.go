@@ -36,7 +36,7 @@ import (
 	"os"
 	"strconv"
 
-	"golang.org/x/tools/go/types"
+	"go/types"
 )
 
 const trace = false
